@@ -1,0 +1,325 @@
+services:
+  pg-spotify:
+    image: postgres:16
+    container_name: pg-airflow
+    hostname: pg-spotify
+    restart: always
+    environment:
+      - POSTGRES_USER=spotify
+      - POSTGRES_PASSWORD=spotify
+      - POSTGRES_DB=spotify
+    ports:
+      - "5433:5432"
+    volumes:
+      - .docker/pg-spotify:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD", "pg_isready", "-U", "spotify" ]
+      interval: 10s
+      retries: 5
+      start_period: 5s
+
+  pg-airflow:
+    image: postgres:16
+    container_name: pg-airflow
+    hostname: pg-airflow
+    restart: always
+    environment:
+      - POSTGRES_USER=airflow
+      - POSTGRES_PASSWORD=airflow
+      - POSTGRES_DB=airflow
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./data/pg-postgresql:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD", "pg_isready", "-U", "airflow" ]
+      interval: 10s
+      retries: 5
+      start_period: 5s
+
+  minio:
+    image: minio/minio
+    container_name: minio
+    hostname: minio
+    ports:
+      - "10000:10000"
+      - "10001:10001"
+    environment:
+      MINIO_ROOT_USER: minio
+      MINIO_ROOT_PASSWORD: minio_admin
+    volumes:
+      - ./data/minio:/data
+    command: server --address 0.0.0.0:10000 --console-address 0.0.0.0:10001 /data
+
+  airflow:
+    image: airflow:local
+    container_name: airflow
+    hostname: airflow
+    restart: always
+    depends_on:
+      - pg-airflow
+    environment:
+      - AIRFLOW__CORE__DAGS_FOLDER=/opt/airflow/dags # Path to DAGs, adjust to your needs
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__CORE__ENABLE_XCOM_PICKLING=True
+      - AIRFLOW__CORE__LOAD_EXAMPLES=False
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@pg-airflow:5432/airflow
+      - AIRFLOW__API__AUTH_BACKENDS=airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session # Enable Basic Auth
+    env_file:
+      - containers/airflow/.env
+    volumes:
+      - ./src:/opt/airflow/nyc_taxi/src
+      - ./containers/jars:/home/airflow/jars
+    ports:
+      - "8080:8080"
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - |
+        airflow db migrate
+        airflow users create --username admin --password admin --role Admin --email admin@admin.com --firstname admin --lastname admin
+        airflow standalone
+    healthcheck:
+      test: [ "CMD", "curl", "--fail", "http://localhost:8080/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  spark-master:
+    image: spark:local
+    container_name: spark-master
+    user: root
+    hostname: spark
+    environment:
+      - SPARK_MODE=master
+      - SPARK_RPC_AUTHENTICATION_ENABLED=no
+      - SPARK_RPC_ENCRYPTION_ENABLED=no
+      - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
+      - SPARK_SSL_ENABLED=no
+    env_file:
+      - containers/spark/.env
+    volumes:
+      - ./src:/usr/local/src
+      - ./containers/spark/spark-defaults.conf:/opt/bitnami/spark/conf/spark-defaults.conf
+    ports:
+      - "8181:8080"
+      - "7077:7077"
+      - "4040:4040"
+
+  spark-worker-1:
+    image: spark:local
+    container_name: spark-worker-1
+    user: root
+    environment:
+      - SPARK_MODE=worker
+      - SPARK_MASTER_URL=spark://spark:7077
+      - SPARK_WORKER_MEMORY=2G
+      - SPARK_WORKER_CORES=1
+      - SPARK_RPC_AUTHENTICATION_ENABLED=no
+      - SPARK_RPC_ENCRYPTION_ENABLED=no
+      - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
+      - SPARK_SSL_ENABLED=no
+    env_file:
+      - containers/spark/.env
+    volumes:
+      - ./src:/usr/local/src
+      - ./containers/spark/spark-defaults.conf:/opt/bitnami/spark/conf/spark-defaults.conf
+    ports:
+      - "8182:8081"
+
+  spark-worker-2:
+    image: spark:local
+    container_name: spark-worker-2
+    user: root
+    environment:
+      - SPARK_MODE=worker
+      - SPARK_MASTER_URL=spark://spark:7077
+      - SPARK_WORKER_MEMORY=2G
+      - SPARK_WORKER_CORES=1
+      - SPARK_RPC_AUTHENTICATION_ENABLED=no
+      - SPARK_RPC_ENCRYPTION_ENABLED=no
+      - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
+      - SPARK_SSL_ENABLED=no
+    env_file:
+      - containers/spark/.env
+    volumes:
+      - ./src:/usr/local/src
+      - ./containers/spark/spark-defaults.conf:/opt/bitnami/spark/conf/spark-defaults.conf
+    ports:
+      - "8183:8081"
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.5
+    hostname: zookeeper
+    container_name: zookeeper
+    restart: always
+    ports:
+      - "2181:2181"
+    environment:
+      ZOOKEEPER_SERVER_ID: 1
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+
+  kafka:
+    image: confluentinc/cp-server:7.5.5
+    hostname: kafka
+    container_name: kafka
+    restart: always
+    ports:
+      - "9092:9092"
+      - "9101:9101"
+      - "9997:9997"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: 'zookeeper:2181'
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_CONFLUENT_LICENSE_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_CONFLUENT_BALANCER_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: true
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_METRIC_REPORTERS: io.confluent.metrics.reporter.ConfluentMetricsReporter
+      KAFKA_JMX_PORT: 9101
+      KAFKA_JMX_HOSTNAME: localhost
+      KAFKA_CONFLUENT_SCHEMA_REGISTRY_URL: http://schema-registry:8081
+      CONFLUENT_METRICS_REPORTER_BOOTSTRAP_SERVERS: kafka:29092
+      CONFLUENT_METRICS_REPORTER_TOPIC_REPLICAS: 1
+      CONFLUENT_METRICS_ENABLE: 'true'
+      CONFLUENT_SUPPORT_CUSTOMER_ID: 'anonymous'
+    links:
+      - zookeeper
+    depends_on:
+      - zookeeper
+    volumes:
+      - ./data/kafka/zookeeper_data:/var/lib/zookeeper/data
+      - ./data/kafka/zookeeper_log:/var/lib/zookeeper/log
+
+  schema-registry:
+    image: confluentinc/cp-schema-registry:7.5.5
+    hostname: schema-registry
+    container_name: schema-registry
+    restart: always
+    depends_on:
+      - zookeeper
+      - kafka
+    links:
+      - zookeeper
+      - kafka
+    ports:
+      - "8081:8081"
+    environment:
+      SCHEMA_REGISTRY_HOST_NAME: schema-registry
+      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: kafka:29092
+      SCHEMA_REGISTRY_KAFKASTORE_CONNECTION_URL: zookeeper:2181
+      SCHEMA_REGISTRY_LISTENERS: http://0.0.0.0:8081
+      SCHEMA_REGISTRY_KAFKASTORE_TOPIC_REPLICATION_FACTOR: 1
+      SCHEMA_REGISTRY_ACCESS_CONTROL_ALLOW_METHODS: GET,POST,PUT,OPTIONS
+      SCHEMA_REGISTRY_ACCESS_CONTROL_ALLOW_ORIGIN: "*"
+
+  kafka-connect:
+    image: confluentinc/cp-kafka-connect:7.5.5
+    hostname: kafka-connect
+    container_name: kafka-connect
+    restart: always
+    depends_on:
+      - zookeeper
+      - kafka
+      - schema-registry
+    links:
+      - zookeeper
+      - kafka
+      - schema-registry
+    ports:
+      - "8083:8083"
+    environment:
+      CONNECT_BOOTSTRAP_SERVERS: kafka:29092
+      CONNECT_REST_ADVERTISED_HOST_NAME: kafka-connect
+      CONNECT_PLUGIN_PATH: '/usr/share/java,/usr/share/confluent-hub-components/,/connectors/'
+      CONNECT_REST_PORT: 8083
+      CONNECT_GROUP_ID: kafka-connect
+      CONNECT_CONFIG_STORAGE_TOPIC: kafka-connect-configs
+      CONNECT_CONFIG_STORAGE_REPLICATION_FACTOR: 1
+      CONNECT_OFFSET_STORAGE_TOPIC: kafka-connect-offsets
+      CONNECT_OFFSET_STORAGE_REPLICATION_FACTOR: 1
+      CONNECT_STATUS_STORAGE_TOPIC: kafka-connect-status
+      CONNECT_STATUS_STORAGE_REPLICATION_FACTOR: 1
+      CONNECT_KEY_CONVERTER: io.confluent.connect.avro.AvroConverter
+      CONNECT_KEY_CONVERTER_SCHEMA_REGISTRY_URL: 'http://schema-registry:8081'
+      CONNECT_VALUE_CONVERTER: io.confluent.connect.avro.AvroConverter
+      CONNECT_VALUE_CONVERTER_SCHEMA_REGISTRY_URL: 'http://schema-registry:8081'
+      CONNECT_INTERNAL_KEY_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+      CONNECT_INTERNAL_VALUE_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+      CONNECT_ZOOKEEPER_CONNECT: zookeeper:2181
+      CONNECT_ACCESS_CONTROL_ALLOW_METHODS: GET,POST,PUT,OPTIONS
+      CONNECT_ACCESS_CONTROL_ALLOW_ORIGIN: "*"
+      CONNECT_LOG4J_ROOT_LOGLEVEL: "INFO"
+      CONNECT_LOG4J_LOGGERS: "org.apache.kafka.connect.runtime.rest=WARN,org.reflections=ERROR"
+      CONNECT_LOG4J_APPENDER_STDOUT_LAYOUT_CONVERSIONPATTERN: "[%d] %p %X{connector.context}%m (%c:%L)%n"
+      # CLASSPATH required due to CC-2422
+      CLASSPATH: /usr/share/java/monitoring-interceptors/monitoring-interceptors-7.5.5.jar
+      CONNECT_PRODUCER_INTERCEPTOR_CLASSES: "io.confluent.monitoring.clients.interceptor.MonitoringProducerInterceptor"
+      CONNECT_CONSUMER_INTERCEPTOR_CLASSES: "io.confluent.monitoring.clients.interceptor.MonitoringConsumerInterceptor"
+    volumes:
+      - ./kafka/connectors:/connectors
+    command:
+      - bash
+      - -c
+      - |
+        echo "Installing connector plugins"
+        confluent-hub install --no-prompt debezium/debezium-connector-postgresql:2.5.4
+        #
+        echo "Launching Kafka Connect worker"
+        /etc/confluent/docker/run &
+        #
+        echo "Waiting for Kafka Connect to start listening on localhost ⏳"
+        while : ; do
+          curl_status=$$(curl -s -o /dev/null -w %{http_code} http://localhost:8083/connectors)
+          echo -e $$(date) " Kafka Connect listener HTTP state: " $$curl_status " (waiting for 200)"
+          if [ $$curl_status -eq 200 ] ; then
+            break
+          fi
+          sleep 5
+        done
+        sleep infinity
+
+  rest-proxy:
+    image: confluentinc/cp-kafka-rest:7.5.5
+    hostname: rest-proxy
+    container_name: rest-proxy
+    ports:
+      - "8082:8082"
+    environment:
+      KAFKA_REST_BOOTSTRAP_SERVERS: "PLAINTEXT://kafka:29092"
+      KAFKA_REST_LISTENERS: "http://0.0.0.0:8082/"
+      KAFKA_REST_HOST_NAME: "rest-proxy"
+      KAFKA_REST_SCHEMA_REGISTRY_URL: "http://schema-registry:8081/"
+    depends_on:
+      - "kafka"
+      - "schema-registry"
+
+  control-center:
+    image: confluentinc/cp-enterprise-control-center:7.5.5
+    hostname: control-center
+    container_name: control-center
+    depends_on:
+      - kafka
+      - schema-registry
+      - kafka-connect
+    ports:
+      - "9021:9021"
+    environment:
+      CONTROL_CENTER_BOOTSTRAP_SERVERS: 'kafka:29092'
+      CONTROL_CENTER_CONNECT_CONNECT-DEFAULT_CLUSTER: 'http://kafka-connect:8083'
+      CONTROL_CENTER_CONNECT_HEALTHCHECK_ENDPOINT: '/connectors'
+      CONTROL_CENTER_KSQL_KSQLDB1_URL: "http://ksqldb-server:8088"
+      CONTROL_CENTER_KSQL_KSQLDB1_ADVERTISED_URL: "http://localhost:8088"
+      CONTROL_CENTER_SCHEMA_REGISTRY_URL: "http://schema-registry:8081"
+      CONTROL_CENTER_REPLICATION_FACTOR: 1
+      CONTROL_CENTER_INTERNAL_TOPICS_PARTITIONS: 1
+      CONTROL_CENTER_MONITORING_INTERCEPTOR_TOPIC_PARTITIONS: 1
+      CONFLUENT_METRICS_TOPIC_REPLICATION: 1
+      PORT: 9021

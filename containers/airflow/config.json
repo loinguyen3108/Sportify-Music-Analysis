@@ -1,0 +1,12 @@
+{
+  "version": "10",
+  "aliases": {
+    "local": {
+      "url": "http://minio:10000",
+      "accessKey": "minio",
+      "secretKey": "minio_admin",
+      "api": "S3v4",
+      "path": "auto"
+    }
+  }
+}

@@ -1,0 +1,9 @@
+apache-airflow==2.9.2
+apache-airflow-providers-apache-spark==4.10.0
+confluent-kafka==2.5.0
+fastavro==1.9.5
+pyspark==3.5.3
+python-decouple==3.8
+requests==2.32.3
+SQLAlchemy==1.4.51
+spotipy==2.24.0
