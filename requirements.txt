@@ -7,3 +7,5 @@ python-decouple==3.8
 requests==2.32.3
 SQLAlchemy==1.4.51
 spotipy==2.24.0
+psycopg2-binary==2.9.10
+beautifulsoup4==4.12.3

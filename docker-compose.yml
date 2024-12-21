@@ -18,6 +18,19 @@ services:
       retries: 5
       start_period: 5s
 
+  spotify-web-api:
+    image: spotify-web-api:local
+    container_name: spotify-web-api
+    hostname: spotify-web-api
+    restart: always
+    ports:
+      - "8000:8000"
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - |
+        uwsgi --http 0.0.0.0:8000 --master -p 1 -w api:app
+
   pg-airflow:
     image: postgres:16
     container_name: pg-airflow
