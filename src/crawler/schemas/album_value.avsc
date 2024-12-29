@@ -1,0 +1,11 @@
+{
+    "namespace": "com.spotify.crawler",
+    "type": "record",
+    "name": "album.value",
+    "fields": [
+        {
+            "name": "album_id",
+            "type": "string"
+        }
+    ]
+}

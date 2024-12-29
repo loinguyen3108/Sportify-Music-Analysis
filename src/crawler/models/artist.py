@@ -12,7 +12,7 @@ class Artist(Base, TimeTrackingMixin):
     followers_count = Column(Integer)
     genres = Column(ARRAY(Text))
     image = Column(Text)
-    name = Column(Text, nullable=False)
+    name = Column(Text)
     popularity = Column(SmallInteger)
 
     def __repr__(self):

@@ -25,7 +25,7 @@ CREATE TABLE IF NOT EXISTS public.artist (
     followers_count INTEGER,
     genres text [],
     image text,
-    name text NOT NULL,
+    name text,
     popularity SMALLINT
 );
 -- Table: playlist
@@ -59,7 +59,7 @@ CREATE TABLE IF NOT EXISTS public.track (
     popularity SMALLINT,
     restrictions text [],
     track_number INTEGER NOT NULL,
-    plays_count INTEGER
+    plays_count bigint
 );
 -- Table: playlist_track
 CREATE TABLE IF NOT EXISTS public.playlist_track (

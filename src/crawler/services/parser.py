@@ -89,10 +89,12 @@ def parse_playlist_detail(data: dict) -> Playlist:
     tracks = data.get('tracks', {}).get('items')
     if tracks:
         playlist.tracks = [
-            parse_track_detail(track['track']) for track in tracks['items']]
+            parse_track_detail(track['track']) for track in tracks
+            if track['track'] is not None
+        ]
         playlist.playlist_tracks = [
             parse_playlist_track(track, playlist_id=playlist.playlist_id)
-            for track in tracks['items']
+            for track in tracks
         ]
 
     return playlist
@@ -116,6 +118,10 @@ def parse_playlist_tracks_response(response: dict) -> List[Track]:
     items = response['items']
     tracks = []
     for item in items:
+        if not item['track']:
+            continue
+        if item['track']['is_local']:
+            continue
         track = parse_track_detail(item['track'])
         track.playlist_track = parse_playlist_track(
             item, playlist_id=playlist_id)

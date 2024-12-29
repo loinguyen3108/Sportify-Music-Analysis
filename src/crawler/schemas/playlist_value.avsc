@@ -1,0 +1,11 @@
+{
+    "namespace": "com.spotify.crawler",
+    "type": "record",
+    "name": "playlist.value",
+    "fields": [
+        {
+            "name": "playlist_id",
+            "type": "string"
+        }
+    ]
+}

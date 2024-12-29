@@ -2,16 +2,17 @@ from bs4 import BeautifulSoup
 from datetime import date
 import random
 import time
-from typing import Any, List, Tuple, Union
+from typing import Any, Iterator, List, Union
 
 import requests
 from requests.exceptions import Timeout, RequestException
 from spotipy import Spotify
-from spotipy.oauth2 import SpotifyClientCredentials
+from spotipy.cache_handler import CacheFileHandler
+from spotipy.oauth2 import SpotifyOAuth
 
-from src.configs.crawler import SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET, \
-    SPOTIFY_WEB_API, T_ARTIST, T_PLAYLIST
-from src.crawler.models import Album, Artist, CrawlerTracking, Playlist, Track, User
+from src.configs.crawler import SPOTIFY_CACHE_USERNAME, SPOTIFY_CLIENT_ID,  \
+    SPOTIFY_CLIENT_SECRET, SPOTIFY_REDIRECT_URI, SPOTIFY_WEB_API, T_ARTIST, T_PLAYLIST
+from src.crawler.models import Album, Artist, CrawlerTracking, Playlist, Track
 from src.infratructure.postgres.repository import Repository
 from src.crawler.services.base import BaseService
 from src.crawler.services.parser import parse_albums_response, parse_artist, \
@@ -33,14 +34,17 @@ class SpotifyService(BaseService):
         self.repo = Repository()
 
     def _get_client(self):
-        creds = SpotifyClientCredentials(
+        oauth = SpotifyOAuth(
             client_id=SPOTIFY_CLIENT_ID,
-            client_secret=SPOTIFY_CLIENT_SECRET
+            client_secret=SPOTIFY_CLIENT_SECRET,
+            redirect_uri=SPOTIFY_REDIRECT_URI,
+            cache_handler=CacheFileHandler(
+                username=SPOTIFY_CACHE_USERNAME),
         )
-        return Spotify(auth_manager=creds)
+        return Spotify(auth_manager=oauth)
 
     def crawl_albums_by_artist_id(self, artist_id: str, max_items: int = DEFAULT_MAX_ITEMS,
-                                  offset: int = 0) -> Union[None, List[Album]]:
+                                  offset: int = 0) -> Union[None, Iterator[List[Album]]]:
         if not artist_id:
             raise ValueError('artist_id is required')
 
@@ -60,14 +64,16 @@ class SpotifyService(BaseService):
             offset=offset
         )
 
-        crawled_albums = []
+        crawled_albums = 0
         for albums in pages:
-            crawled_albums.extend([
-                self.store_album(album) for album in albums])
-        self.logger.info(f'Found {len(crawled_albums)} albums')
+            stored_albums = [
+                self.store_album(album) for album in albums
+                if album.release_date is not None]
+            crawled_albums += len(stored_albums)
+            yield stored_albums
+        self.logger.info(f'Found {crawled_albums} albums')
         self.track_func(func_name=func_name, main_arg_name=main_arg_name,
                         main_arg_value=artist_id)
-        return crawled_albums
 
     def crawl_artists(self, artist_ids: List[str]) -> Union[None, List[Artist]]:
         if not artist_ids:
@@ -115,7 +121,7 @@ class SpotifyService(BaseService):
         return playlist
 
     def crawl_playlist_tracks(self, playlist_id: str, max_items: int = DEFAULT_MAX_ITEMS,
-                              offset: int = 0) -> Union[None, List[Track]]:
+                              offset: int = 0) -> Union[None, Iterator[List[Track]]]:
         if not playlist_id:
             raise ValueError('playlist_id is required')
 
@@ -135,13 +141,14 @@ class SpotifyService(BaseService):
             api=api, parser=parser, playlist_id=playlist_id, max_items=max_items, offset=offset, limit=self.DEFAULT_SEARCH_LIMIT
         )
 
-        crawled_tracks = []
+        crawled_tracks = 0
         for tracks in pages:
-            crawled_tracks.extend(self.store_tracks(tracks))
-        self.logger.info(f'Found {len(crawled_tracks)} tracks')
+            stored_tracks = self.store_tracks(tracks)
+            crawled_tracks += len(stored_tracks)
+            yield stored_tracks
+        self.logger.info(f'Found {crawled_tracks} tracks')
         self.track_func(func_name=func_name, main_arg_name=main_arg_name,
                         main_arg_value=playlist_id)
-        return crawled_tracks
 
     def crawl_playlists_by_user_id(self, user_id: str, max_items: int = DEFAULT_MAX_ITEMS,
                                    offset: int = 0) -> Union[None, List[Playlist]]:
@@ -185,7 +192,7 @@ class SpotifyService(BaseService):
             self.logger.info(f'Already crawled track with id: {track_id}')
             return
 
-        self.logger.info(f'Crawling track with id: {track_id}')
+        self.logger.info(f'Crawling track plays_count with id: {track_id}')
         track = self.find_track_by_id(track_id=track_id)
         if not track:
             self.logger.info(f'Not found track with id: {track_id}')
@@ -193,6 +200,7 @@ class SpotifyService(BaseService):
 
         plays_count = None
         # get via html
+        self.logger.info(f'Get plays_count via html')
         response = requests.get(f'https://open.spotify.com/track/{track_id}')
         soup = BeautifulSoup(response.text, 'html.parser')
         link = soup.find('a', href=f'/track/{track_id}')
@@ -202,6 +210,7 @@ class SpotifyService(BaseService):
                 plays_count = int(plays_count_str.text.replace(',', ''))
 
         if not plays_count:
+            self.logger.info(f'Get plays_count via web api')
             try:
                 response = requests.get(
                     f'{SPOTIFY_WEB_API}/track/{track_id}/plays_count', timeout=60)
@@ -240,8 +249,10 @@ class SpotifyService(BaseService):
         crawled_tracks = []
         for batch_ids in self.chunks(track_ids):
             response = self.client.tracks(tracks=list(batch_ids))
-            tracks = [parse_track_detail(track)
-                      for track in response['tracks'] or []]
+            tracks = [
+                parse_track_detail(track) for track in response['tracks'] or []
+                if track is not None
+            ]
             crawled_tracks.extend(self.store_tracks(tracks))
         self.logger.info(f'Found {len(crawled_tracks)} tracks')
         self.track_func(func_name=func_name, main_arg_name=main_arg_name,
@@ -249,7 +260,7 @@ class SpotifyService(BaseService):
         return crawled_tracks
 
     def crawl_tracks_by_album_id(self, album_id: str, max_items: int = DEFAULT_MAX_ITEMS,
-                                 offset: int = 0) -> Union[None, List[Track]]:
+                                 offset: int = 0) -> Union[None, Iterator[List[Track]]]:
         if not album_id:
             raise ValueError('album_id is required')
 
@@ -268,19 +279,20 @@ class SpotifyService(BaseService):
             api=api, parser=parser, album_id=album_id, max_items=max_items, offset=offset, limit=self.DEFAULT_SEARCH_LIMIT
         )
 
-        crawled_tracks = []
+        crawled_tracks = 0
         for tracks in pages:
-            crawled_tracks.extend([
+            stored_tracks = [
                 self.store_simplified_track(track=track, album_id=album_id)
                 for track in tracks
-            ])
-        self.logger.info(f'Found {len(crawled_tracks)} tracks')
+            ]
+            crawled_tracks += len(stored_tracks)
+            yield stored_tracks
+        self.logger.info(f'Found {crawled_tracks} tracks')
         self.track_func(func_name=func_name, main_arg_name=main_arg_name,
                         main_arg_value=album_id)
-        return crawled_tracks
 
     def search_artists(self, query: str, max_items: int = DEFAULT_MAX_ITEMS,
-                       offset: int = 0) -> Union[None, List[Artist]]:
+                       offset: int = 0) -> Union[None, Iterator[List[Artist]]]:
         if not query:
             raise ValueError('query is required')
 
@@ -300,16 +312,18 @@ class SpotifyService(BaseService):
             type=T_ARTIST, limit=self.DEFAULT_SEARCH_LIMIT, offset=offset
         )
 
-        crawled_artists = []
+        crawled_artists = 0
         for artists in pages:
-            crawled_artists.extend(self._store_entities(artists))
-        self.logger.info(f'Found {len(crawled_artists)} artists')
+            stored_artists = self._store_entities(artists)
+            crawled_artists += len(stored_artists)
+            yield stored_artists
+
+        self.logger.info(f'Found {crawled_artists} artists')
         self.track_func(func_name=func_name, main_arg_name=main_arg_name,
                         main_arg_value=query)
-        return crawled_artists
 
     def search_playlists(self, query: str, max_items: int = DEFAULT_MAX_ITEMS,
-                         offset: int = 0) -> Union[None, Tuple[List[Playlist], List[User]]]:
+                         offset: int = 0) -> Union[None, Iterator[List[Playlist]]]:
         if not query:
             raise ValueError('query is required')
 
@@ -328,17 +342,15 @@ class SpotifyService(BaseService):
             api=api, parser=parser, max_items=max_items, q=query,
             type=T_PLAYLIST, limit=self.DEFAULT_SEARCH_LIMIT, offset=offset
         )
-        crawled_playlists = []
-        crawled_users = []
+        crawled_playlists = 0
         for playlists in pages:
-            users = [playlist.owner for playlist in playlists]
-            crawled_playlists.extend(self._store_entities(playlists))
-            crawled_users.extend(self._store_entities(users))
-        self.logger.info(f'Found {len(crawled_playlists)} playlists and '
-                         f'{len(crawled_users)} users')
+            stored_playlists = self._store_entities(playlists)
+            self._store_entities([playlist.owner for playlist in playlists])
+            crawled_playlists += len(stored_playlists)
+            yield stored_playlists
+        self.logger.info(f'Found {crawled_playlists} playlists')
         self.track_func(func_name=func_name, main_arg_name=main_arg_name,
                         main_arg_value=query)
-        return crawled_playlists, crawled_users
 
     def _delay_request(self):
         random_delay = random.uniform(self.MIN_DELAY, self.MAX_DELAY)
@@ -382,7 +394,8 @@ class SpotifyService(BaseService):
 
     def store_track(self, track: Track) -> Track:
         if track.is_exists_column('album'):
-            self.store_album(track.album)
+            if track.album.release_date:
+                self.store_album(track.album)
         if track.is_exists_column('artists'):
             self._store_entities(track.artists)
         if track.is_exists_column('playlist_track'):

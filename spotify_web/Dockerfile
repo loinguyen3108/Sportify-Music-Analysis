@@ -1,24 +1,23 @@
 FROM python:3.12
 
-# Install system packages (please keep them sorted)
 RUN apt-get update && apt-get install -y \
-        cmake \
-        curl \
-        g++ \
-        gcc \
-        git \
-        gnupg2 \
-        net-tools \
-        sysstat \
-        htop \
-        libgl1-mesa-glx \
-        libglib2.0-0 \
-        libnss3 \
-        libgconf-2-4 \
-        libfontconfig1 \
-        nano \
+    cmake \
+    curl \
+    g++ \
+    gcc \
+    git \
+    gnupg2 \
+    net-tools \
+    sysstat \
+    htop \
+    libgl1-mesa-glx \
+    libglib2.0-0 \
+    libnss3 \
+    libgconf-2-4 \
+    libfontconfig1 \
+    nano \
     && rm -rf /var/lib/apt/lists/*
-    
+
 RUN CHROMEDRIVER_VERSION=`curl -sS chromedriver.storage.googleapis.com/LATEST_RELEASE` \
     && mkdir -p /opt/chromedriver-$CHROMEDRIVER_VERSION  \
     && curl -sS -o /tmp/chromedriver_linux64.zip http://chromedriver.storage.googleapis.com/$CHROMEDRIVER_VERSION/chromedriver_linux64.zip  \

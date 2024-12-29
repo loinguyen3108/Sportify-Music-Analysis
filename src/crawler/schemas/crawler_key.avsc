@@ -1,0 +1,11 @@
+{
+    "namespace": "com.spotify.crawler",
+    "type": "record",
+    "name": "crawler.key",
+    "fields": [
+        {
+            "name": "timestamp",
+            "type": "long"
+        }
+    ]
+}

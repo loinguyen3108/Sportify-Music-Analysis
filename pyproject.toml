@@ -1,0 +1,27 @@
+[build-system]
+build-backend = 'setuptools.build_meta'
+requires = ['setuptools']
+
+[project]
+name = 'spotify-analysis'
+dynamic = ['version']
+license = { file = 'LICENSE' }
+authors = [
+    { 'name' = 'Loi Nguyen', 'email' = 'loinguyen318.work@gmail.com' }
+]
+maintainers = [
+    { 'name' = 'Loi Nguyen', 'email' = 'loinguyen318.work@gmail.com' }
+]
+classifiers = [
+    'Programming Language :: Python :: 3',
+    'Operating System :: OS Independent'
+]
+description = 'Spotify Web API'
+requires-python = '>=3.11, <4'
+
+
+[tool.setuptools.packages.find]
+exclude = ['tests']
+
+[project.scripts]
+xbi = 'src.cli.consumer:main'

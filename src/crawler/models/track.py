@@ -1,4 +1,5 @@
-from sqlalchemy import ARRAY, Column, Integer, SmallInteger, Text, Boolean
+from sqlalchemy import ARRAY, BigInteger, Boolean, Column, Integer, \
+    SmallInteger, Text
 
 from .base import Base, TimeTrackingMixin
 
@@ -19,7 +20,7 @@ class Track(Base, TimeTrackingMixin):
     popularity = Column(SmallInteger)
     restrictions = Column(ARRAY(Text))
     track_number = Column(Integer, nullable=False)
-    plays_count = Column(Integer)
+    plays_count = Column(BigInteger)
 
     def __repr__(self):
         return f'{self.__class__.__name__}(track_id={self.track_id})'
