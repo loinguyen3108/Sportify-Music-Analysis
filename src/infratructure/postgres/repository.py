@@ -23,13 +23,16 @@ class Repository:
         )
         return scoped_session(session_factory)
 
-    def build_query(self, model, *args):
+    def build_query(self, model, *args, **kwargs):
         if not model:
             raise ValueError('model is required')
 
         stmt = select(model)
         if args:
             stmt = stmt.filter(*args)
+
+        if 'limit' in kwargs:
+            stmt = stmt.limit(kwargs['limit'])
 
         return self.session.execute(stmt)
 
@@ -46,7 +49,14 @@ class Repository:
         if not model_instance:
             raise ValueError('model_instance is required')
 
-        return self.build_query(model_instance, *args).scalar_one_or_none()
+        kwargs = {'limit': 1}
+        return self.build_query(model_instance, *args, **kwargs).scalar_one_or_none()
+
+    def find_many(self, model_instance, *args):
+        if not model_instance:
+            raise ValueError('model_instance is required')
+
+        return self.build_query(model_instance, *args).scalars().all()
 
     def insert(self, model_instance):
         try:

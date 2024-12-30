@@ -90,11 +90,11 @@ def parse_playlist_detail(data: dict) -> Playlist:
     if tracks:
         playlist.tracks = [
             parse_track_detail(track['track']) for track in tracks
-            if track['track'] is not None
+            if track['track'] is not None and not track['track']['is_local']
         ]
         playlist.playlist_tracks = [
             parse_playlist_track(track, playlist_id=playlist.playlist_id)
-            for track in tracks
+            for track in tracks if track['track'] is not None and not track['track']['is_local']
         ]
 
     return playlist

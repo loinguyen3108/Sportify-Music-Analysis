@@ -5,7 +5,7 @@ import time
 from typing import Any, Iterator, List, Union
 
 import requests
-from requests.exceptions import Timeout, RequestException
+from requests.exceptions import Timeout, ConnectionError, RequestException
 from spotipy import Spotify
 from spotipy.cache_handler import CacheFileHandler
 from spotipy.oauth2 import SpotifyOAuth
@@ -43,6 +43,13 @@ class SpotifyService(BaseService):
         )
         return Spotify(auth_manager=oauth)
 
+    def authenticate(self, refresh: bool = False):
+        self.logger.info('Authenticating')
+        if refresh:
+            self.client = self._get_client()
+        self.client.track('7Kk581xmajJZNYit8Ssrtd')
+        self.logger.info('Authenticated')
+
     def crawl_albums_by_artist_id(self, artist_id: str, max_items: int = DEFAULT_MAX_ITEMS,
                                   offset: int = 0) -> Union[None, Iterator[List[Album]]]:
         if not artist_id:
@@ -50,8 +57,7 @@ class SpotifyService(BaseService):
 
         func_name = 'crawl_albums_by_artist_id'
         main_arg_name = 'artist_id'
-        if not self.should_crawl(func_name=func_name, main_arg_name=main_arg_name, main_arg_value=artist_id,
-                                 tracked_at=date.today()):
+        if not self.should_crawl(func_name=func_name, main_arg_name=main_arg_name, main_arg_value=artist_id):
             self.logger.info(
                 f'Already crawled albums for artist with id: {artist_id}')
             return
@@ -80,11 +86,15 @@ class SpotifyService(BaseService):
             raise ValueError('artist_ids is required')
 
         func_name = 'crawl_artists'
-        main_arg_name = 'artist_ids'
-        if not self.should_crawl(func_name=func_name, main_arg_name=main_arg_name, main_arg_value=artist_ids,
-                                 tracked_at=date.today()):
-            self.logger.info('Already crawled artists with '
-                             f'{len(artist_ids)} ids')
+        main_arg_name = 'artist_id'
+        artist_ids = [
+            artist_id for artist_id in artist_ids
+            if self.should_crawl(func_name=func_name, main_arg_name=main_arg_name,
+                                 main_arg_value=artist_id)
+        ]
+        if not artist_ids:
+            self.logger.info(
+                f'Already crawled artists with {len(artist_ids)} ids')
             return
 
         self.logger.info(f'Crawling artists with {len(artist_ids)} ids')
@@ -92,11 +102,14 @@ class SpotifyService(BaseService):
         for batch_ids in self.chunks(artist_ids):
             response = self.client.artists(list(batch_ids))
             artists = [parse_artist(artist)
-                       for artist in response['artists'] or []]
+                       for artist in response['artists'] or []
+                       if artist is not None]
             crawled_artists.extend(self._store_entities(artists))
         self.logger.info(f'Found {len(crawled_artists)} artists')
         self.track_func(func_name=func_name, main_arg_name=main_arg_name,
                         main_arg_value=artist_ids)
+        if crawled_artists:
+            self._delay_request()
         return crawled_artists
 
     def crawl_playlist(self, playlist_id: str) -> Union[None, Playlist]:
@@ -105,8 +118,7 @@ class SpotifyService(BaseService):
 
         func_name = 'crawl_playlist'
         main_arg_name = 'playlist_id'
-        if not self.should_crawl(func_name=func_name, main_arg_name=main_arg_name, main_arg_value=playlist_id,
-                                 tracked_at=date.today()):
+        if not self.should_crawl(func_name=func_name, main_arg_name=main_arg_name, main_arg_value=playlist_id):
             self.logger.info(
                 f'Already crawled playlist with id: {playlist_id}')
             return
@@ -118,6 +130,8 @@ class SpotifyService(BaseService):
         self.logger.info(f'Found playlist: {playlist}')
         self.track_func(func_name=func_name, main_arg_name=main_arg_name,
                         main_arg_value=playlist_id)
+        if playlist:
+            self._delay_request()
         return playlist
 
     def crawl_playlist_tracks(self, playlist_id: str, max_items: int = DEFAULT_MAX_ITEMS,
@@ -127,8 +141,7 @@ class SpotifyService(BaseService):
 
         func_name = 'crawl_playlist_tracks'
         main_arg_name = 'playlist_id'
-        if not self.should_crawl(func_name=func_name, main_arg_name=main_arg_name, main_arg_value=playlist_id,
-                                 tracked_at=date.today()):
+        if not self.should_crawl(func_name=func_name, main_arg_name=main_arg_name, main_arg_value=playlist_id):
             self.logger.info(
                 f'Already crawled playlist tracks for playlist with id: {playlist_id}')
             return
@@ -157,8 +170,7 @@ class SpotifyService(BaseService):
 
         func_name = 'crawl_playlists_by_user_id'
         main_arg_name = 'user_id'
-        if not self.should_crawl(func_name=func_name, main_arg_name=main_arg_name, main_arg_value=user_id,
-                                 tracked_at=date.today()):
+        if not self.should_crawl(func_name=func_name, main_arg_name=main_arg_name, main_arg_value=user_id):
             self.logger.info(
                 f'Already crawled playlists for user with id: {user_id}')
             return
@@ -187,8 +199,7 @@ class SpotifyService(BaseService):
 
         func_name = 'crawl_track_plays_count_by_id'
         main_arg_name = 'track_id'
-        if not self.should_crawl(func_name=func_name, main_arg_name=main_arg_name, main_arg_value=track_id,
-                                 tracked_at=date.today()):
+        if not self.should_crawl(func_name=func_name, main_arg_name=main_arg_name, main_arg_value=track_id):
             self.logger.info(f'Already crawled track with id: {track_id}')
             return
 
@@ -201,13 +212,18 @@ class SpotifyService(BaseService):
         plays_count = None
         # get via html
         self.logger.info(f'Get plays_count via html')
-        response = requests.get(f'https://open.spotify.com/track/{track_id}')
-        soup = BeautifulSoup(response.text, 'html.parser')
-        link = soup.find('a', href=f'/track/{track_id}')
-        if link:
-            plays_count_str = link.find('span', class_='encore-text-marginal')
-            if plays_count_str:
-                plays_count = int(plays_count_str.text.replace(',', ''))
+        try:
+            response = requests.get(
+                f'https://open.spotify.com/track/{track_id}')
+            soup = BeautifulSoup(response.text, 'html.parser')
+            link = soup.find('a', href=f'/track/{track_id}')
+            if link:
+                plays_count_str = link.find(
+                    'span', class_='encore-text-marginal')
+                if plays_count_str:
+                    plays_count = int(plays_count_str.text.replace(',', ''))
+        except ConnectionError as e:
+            self.logger.error(e)
 
         if not plays_count:
             self.logger.info(f'Get plays_count via web api')
@@ -238,11 +254,14 @@ class SpotifyService(BaseService):
             raise ValueError('track_ids is required')
 
         func_name = 'crawl_tracks'
-        main_arg_name = 'track_ids'
-        if not self.should_crawl(func_name=func_name, main_arg_name=main_arg_name, main_arg_value=track_ids,
-                                 tracked_at=date.today()):
-            self.logger.info(
-                f'Already crawled tracks with {len(track_ids)} ids')
+        main_arg_name = 'track_id'
+        track_ids = [
+            track_id for track_id in track_ids
+            if self.should_crawl(func_name=func_name, main_arg_name=main_arg_name,
+                                 main_arg_value=track_id)
+        ]
+        if not track_ids:
+            self.logger.info(f'Already crawled {len(track_ids)} tracks')
             return
 
         self.logger.info(f'Crawling tracks with {len(track_ids)} ids')
@@ -257,6 +276,8 @@ class SpotifyService(BaseService):
         self.logger.info(f'Found {len(crawled_tracks)} tracks')
         self.track_func(func_name=func_name, main_arg_name=main_arg_name,
                         main_arg_value=track_ids)
+        if crawled_tracks:
+            self._delay_request()
         return crawled_tracks
 
     def crawl_tracks_by_album_id(self, album_id: str, max_items: int = DEFAULT_MAX_ITEMS,
@@ -266,8 +287,7 @@ class SpotifyService(BaseService):
 
         func_name = 'crawl_tracks_by_album_id'
         main_arg_name = 'album_id'
-        if not self.should_crawl(func_name=func_name, main_arg_name=main_arg_name, main_arg_value=album_id,
-                                 tracked_at=date.today()):
+        if not self.should_crawl(func_name=func_name, main_arg_name=main_arg_name, main_arg_value=album_id):
             self.logger.info(
                 f'Already crawled tracks for album with id: {album_id}')
             return
@@ -298,8 +318,7 @@ class SpotifyService(BaseService):
 
         func_name = 'search_artists'
         main_arg_name = 'query'
-        if not self.should_crawl(func_name=func_name, main_arg_name=main_arg_name, main_arg_value=query,
-                                 tracked_at=date.today()):
+        if not self.should_crawl(func_name=func_name, main_arg_name=main_arg_name, main_arg_value=query):
             self.logger.info(f'Already crawled artists with query: {query}')
             return
 
@@ -329,8 +348,7 @@ class SpotifyService(BaseService):
 
         func_name = 'search_playlists'
         main_arg_name = 'query'
-        if not self.should_crawl(func_name=func_name, main_arg_name=main_arg_name, main_arg_value=query,
-                                 tracked_at=date.today()):
+        if not self.should_crawl(func_name=func_name, main_arg_name=main_arg_name, main_arg_value=query):
             self.logger.info(f'Already crawled playlists with query: {query}')
             return
 
@@ -412,37 +430,31 @@ class SpotifyService(BaseService):
         return self.repo.upsert(track)
 
     def track_func(self, func_name: str, main_arg_name: str, main_arg_value: Any):
-        if isinstance(main_arg_value, list):
-            main_arg_value = ','.join(main_arg_value)
+        if not isinstance(main_arg_value, (str, list)):
+            raise ValueError('main_arg_value must be a string or a list')
+        values = [main_arg_value] if isinstance(
+            main_arg_value, str) else main_arg_value
+        for value in values:
+            crawler_tracking = CrawlerTracking(
+                function_name=func_name, main_arg_name=main_arg_name,
+                main_arg_value=value, tracked_at=date.today()
+            )
+            self.repo.upsert(crawler_tracking)
 
-        if not isinstance(main_arg_value, str):
-            raise ValueError('main_arg_value must be a string')
-
-        crawler_tracking = CrawlerTracking(
-            function_name=func_name, main_arg_name=main_arg_name,
-            main_arg_value=main_arg_value, tracked_at=date.today()
-        )
-        self.repo.upsert(crawler_tracking)
-
-    def should_crawl(self, func_name: str, main_arg_name: str, main_arg_value: Any,
-                     tracked_at: date) -> bool:
-        if isinstance(main_arg_value, list):
-            main_arg_value = ','.join(main_arg_value)
-
+    def should_crawl(self, func_name: str, main_arg_name: str, main_arg_value: str) -> bool:
         if not isinstance(main_arg_value, str):
             raise ValueError('main_arg_value must be a string')
 
         return not self.find_crawler_tracking(func_name, main_arg_name,
-                                              main_arg_value, tracked_at)
+                                              main_arg_value)
 
     def find_crawler_tracking(self, func_name: str, main_arg_name: str,
-                              main_arg_value: Any, tracked_at: date) -> CrawlerTracking:
+                              main_arg_value: str) -> CrawlerTracking:
         return self.repo.find_one(
             CrawlerTracking,
             CrawlerTracking.function_name == func_name,
             CrawlerTracking.main_arg_name == main_arg_name,
-            CrawlerTracking.main_arg_value == main_arg_value,
-            CrawlerTracking.tracked_at == tracked_at
+            CrawlerTracking.main_arg_value == main_arg_value
         )
 
     def find_track_by_id(self, track_id: str) -> Track:

@@ -26,7 +26,7 @@ class SpotifyConsumer:
             'auto.offset.reset': 'earliest',
             'max.poll.interval.ms': 3000000
         })
-        self.consumer.subscribe(self.topics, on_assign=self.on_assign)
+        self.consumer.subscribe(self.topics)
 
     def on_assign(self, consumer, partitions):
         for partition in partitions:

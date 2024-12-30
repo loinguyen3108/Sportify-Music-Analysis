@@ -29,7 +29,7 @@ class CrawlerFlow(BaseCrawler):
             topics=self.ARTIST_TOPICS,
             group_id='artist-consumer',
             messages_handler=ArtistConsumer().messages_handler,
-            num_messages=50, should_sleep=True
+            num_messages=50
         )
 
     @cached_property
@@ -51,7 +51,7 @@ class CrawlerFlow(BaseCrawler):
             topics=self.TRACK_TOPICS,
             group_id='track-consumer',
             messages_handler=TrackConsumer().messages_handler,
-            num_messages=50, should_sleep=True
+            num_messages=50
         )
 
     @cached_property
