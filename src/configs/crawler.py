@@ -8,6 +8,7 @@ SPOTIFY_REDIRECT_URI = config(
 SPOTIFY_CACHE_USERNAME = config('SPOTIFY_CACHE_USERNAME')
 SPOTIFY_WEB_API = config('SPOTIFY_WEB_API', default='http://localhost:8000')
 
+SPOTIFY_URL = 'https://open.spotify.com'
 T_ALBUM = 'album'
 T_ARTIST = 'artist'
 T_PLAYLIST = 'playlist'

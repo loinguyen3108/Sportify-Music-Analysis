@@ -10,9 +10,8 @@ class Track(Base, TimeTrackingMixin):
 
     track_id = Column(Text, primary_key=True, nullable=False)
     album_id = Column(Text, nullable=False)
-    artist_ids = Column(ARRAY(Text), nullable=False)
-    available_markets = Column(ARRAY(Text), nullable=False)
-    disc_number = Column(Integer, nullable=False)
+    available_markets = Column(ARRAY(Text))
+    disc_number = Column(Integer)
     duration_ms = Column(Integer, nullable=False)
     explicit = Column(Boolean, nullable=False)
     url = Column(Text, nullable=False)

@@ -1,8 +1,10 @@
+from concurrent.futures import ThreadPoolExecutor
 from functools import cached_property
 
 from confluent_kafka.serialization import SerializationContext, MessageField
 from spotipy.exceptions import SpotifyException
 
+from src.configs.kafka import CRAWL_STRATEGY
 from src.crawler.base import BaseCrawler
 
 
@@ -15,7 +17,7 @@ class ArtistConsumer(BaseCrawler):
         return self.get_deserialized(schema_name='artist_value')
 
     def messages_handler(self, messages):
-        artist_ids = []
+        artist_ids = set()
         for message in messages:
             if message is None:
                 continue
@@ -29,12 +31,56 @@ class ArtistConsumer(BaseCrawler):
             try:
                 if topic == self.T_ARTIST_ALBUMS:
                     self.ingest_artist_albums(artist_id)
-                if topic == self.T_ARTISTS:
-                    artist_ids.append(artist_id)
+                if topic in (self.T_ARTIST_OFFICIAL, self.T_ARTIST_WEB):
+                    artist_ids.add(artist_id)
             except SpotifyException as e:
                 self.logger.error(e)
         if artist_ids:
-            self.spotify_service.crawl_artists(artist_ids)
+            if CRAWL_STRATEGY == 'official_api':
+                self.spotify_service.crawl_artists(artist_ids)
+            elif CRAWL_STRATEGY == 'web_api':
+                with ThreadPoolExecutor(max_workers=10) as executor:
+                    executor.map(self.ingest_artist_web, artist_ids)
+            else:
+                raise ValueError(f'Invalid crawl strategy: {CRAWL_STRATEGY}')
+
+    def ingest_artist_web(self, artist_id: str):
+        artist = self.spotify_service.crawl_artist(artist_id)
+        if artist:
+            self.spotify_producer.produce(
+                topic=self.T_ARTIST_OFFICIAL,
+                key={'timestamp': self.time_millis()},
+                value={'artist_id': artist.artist_id},
+                key_schema=self.crawler_key_schema,
+                value_schema=self.artist_value_schema
+            )
+            if artist.is_exists_column('albums'):
+                for album in artist.albums:
+                    self.spotify_producer.produce(
+                        topic=self.T_ALBUM_TRACKS,
+                        key={'timestamp': self.time_millis()},
+                        value={'album_id': album.album_id},
+                        key_schema=self.crawler_key_schema,
+                        value_schema=self.album_value_schema
+                    )
+            if artist.is_exists_column('playlist_ids'):
+                for playlist_id in artist.playlist_ids:
+                    self.spotify_producer.produce(
+                        topic=self.T_PLAYLIST_TRACKS,
+                        key={'timestamp': self.time_millis()},
+                        value={'playlist_id': playlist_id},
+                        key_schema=self.crawler_key_schema,
+                        value_schema=self.playlist_value_schema
+                    )
+            if artist.is_exists_column('track_ids'):
+                for track_id in artist.track_ids:
+                    self.spotify_producer.produce(
+                        topic=self.T_TRACK_WEB,
+                        key={'timestamp': self.time_millis()},
+                        value={'track_id': track_id},
+                        key_schema=self.crawler_key_schema,
+                        value_schema=self.track_value_schema
+                    )
 
     def ingest_artist_albums(self, artist_id: str, offset: int = 0):
         if not artist_id:
@@ -44,7 +90,7 @@ class ArtistConsumer(BaseCrawler):
 
         artist_ids = []
         for albums in self.spotify_service.crawl_albums_by_artist_id(
-                artist_id=artist_id, max_items=self.CRAWLER_MAX_ITEMS, offset=offset
+                artist_id=artist_id, max_pages=self.CRAWLER_MAX_PAGES, offset=offset
         ):
             for album in albums or []:
                 self.spotify_producer.produce(
@@ -59,7 +105,7 @@ class ArtistConsumer(BaseCrawler):
 
         for artist_id in set(artist_ids):
             self.spotify_producer.produce(
-                topic=self.T_ARTISTS,
+                topic=self.T_ARTIST_OFFICIAL,
                 key={'timestamp': self.time_millis()},
                 value={'artist_id': artist_id},
                 key_schema=self.crawler_key_schema,

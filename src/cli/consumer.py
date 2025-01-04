@@ -9,8 +9,8 @@ consumers = ['album', 'artist', 'playlist', 'track', 'track_plays_count']
 def main():
     arg_parser = ArgumentParser(description='Spotify Consumer')
 
-    arg_parser.add_argument('-c', '--consumer', choices=consumers,
-                            required=True, help='consume album, artist, playlist or track')
+    arg_parser.add_argument('-c', '--consumer', choices=consumers, required=True,
+                            help=f'consume {", ".join(consumers)}')
     arg_parser.add_argument('-n', '--num-consumers', type=int, default=1,
                             help='number of consumers')
 

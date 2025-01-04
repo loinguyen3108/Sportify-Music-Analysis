@@ -8,15 +8,14 @@ class Album(Base, TimeTrackingMixin):
     __tablename__ = 'album'
 
     album_id = Column(Text, primary_key=True, nullable=False)
-    album_type = Column(Text, nullable=False)
-    available_markets = Column(ARRAY(Text), nullable=False)
+    album_type = Column(Text)
+    available_markets = Column(ARRAY(Text))
     url = Column(Text, nullable=False)
     cover_image = Column(Text)
     name = Column(Text, nullable=False)
-    release_date = Column(Text, nullable=False)
-    release_date_precision = Column(Text, nullable=False)
+    release_date = Column(Text)
+    release_date_precision = Column(Text)
     restrictions = Column(ARRAY(Text))
-    artist_ids = Column(ARRAY(Text), nullable=False)
     label = Column(Text)
     popularity = Column(SmallInteger)
 

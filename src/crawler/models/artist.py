@@ -1,4 +1,4 @@
-from sqlalchemy import ARRAY, Column, Integer, SmallInteger, Text
+from sqlalchemy import ARRAY, BigInteger, Column, Integer, SmallInteger, Text
 
 from .base import Base, TimeTrackingMixin
 
@@ -14,6 +14,7 @@ class Artist(Base, TimeTrackingMixin):
     image = Column(Text)
     name = Column(Text)
     popularity = Column(SmallInteger)
+    monthly_listeners = Column(BigInteger)
 
     def __repr__(self):
         return f'{self.__class__.__name__}(artist_id={self.artist_id})'

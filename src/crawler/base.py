@@ -12,22 +12,24 @@ from src.configs.logger import get_logger
 
 
 class BaseCrawler:
-    CRAWLER_MAX_ITEMS = 10_000
-    T_ARTISTS = 'spotify.crawl.artists'
-    T_TRACKS = 'spotify.crawl.tracks'
-    T_PLAYLIST = 'spotify.crawl.playlist'
+    CRAWLER_MAX_PAGES = 10_000
+    T_ALBUM = 'spotify.crawl.albums'
     T_ALBUM_TRACKS = 'spotify.crawl.album.tracks'
     T_ARTIST_ALBUMS = 'spotify.crawl.artist.albums'
+    T_ARTIST_OFFICIAL = 'spotify.crawl.artist.official'
+    T_ARTIST_WEB = 'spotify.crawl.artist.web'
     T_USER_PLAYLISTS = 'spotify.crawl.user.playlists'
+    T_PLAYLIST = 'spotify.crawl.playlist'
     T_PLAYLIST_TRACKS = 'spotify.crawl.playlist.tracks'
-    T_TRACK_PLAYS_COUNT = 'spotify.crawl.track.plays.count'
+    T_TRACK_OFFICIAL = 'spotify.crawl.track.official'
+    T_TRACK_WEB = 'spotify.crawl.track.web'
     ALBUM_TOPICS = [T_ALBUM_TRACKS]
-    ARTIST_TOPICS = [T_ARTISTS, T_ARTIST_ALBUMS]
-    PLAYLIST_TOPICS = [T_PLAYLIST, T_PLAYLIST_TRACKS]
-    TRACK_TOPICS = [T_TRACKS]
+    ARTIST_TOPICS = [T_ARTIST_OFFICIAL, T_ARTIST_WEB, T_ARTIST_ALBUMS]
+    PLAYLIST_TOPICS = [T_PLAYLIST_TRACKS]
+    TRACK_TOPICS = [T_TRACK_WEB, T_TRACK_OFFICIAL]
     TOPICS = (
-        T_ARTISTS, T_TRACKS, T_ALBUM_TRACKS, T_ARTIST_ALBUMS,
-        T_USER_PLAYLISTS, T_PLAYLIST_TRACKS, T_TRACK_PLAYS_COUNT
+        T_ARTIST_OFFICIAL, T_ARTIST_WEB, T_TRACK_OFFICIAL, T_TRACK_WEB, T_ALBUM_TRACKS, T_ARTIST_ALBUMS,
+        T_USER_PLAYLISTS, T_PLAYLIST_TRACKS
     )
 
     crawler_key_schema = avro.load(f'{SCHEMA_FOLDER}/crawler_key.avsc')
@@ -66,7 +68,7 @@ class BaseCrawler:
 
     def produce_track(self, track: Track):
         self.spotify_producer.produce(
-            topic=self.T_TRACKS,
+            topic=self.T_TRACK_WEB,
             key={'timestamp': self.time_millis()},
             value={'track_id': track.track_id},
             key_schema=self.crawler_key_schema,
@@ -80,12 +82,12 @@ class BaseCrawler:
                 key_schema=self.crawler_key_schema,
                 value_schema=self.album_value_schema
             )
-        if track.is_exists_column('artists'):
-            for artist in track.artists:
+        if track.is_exists_column('artist_track'):
+            for artist_track in track.artist_track:
                 self.spotify_producer.produce(
-                    topic=self.T_ARTISTS,
+                    topic=self.T_ARTIST_WEB,
                     key={'timestamp': self.time_millis()},
-                    value={'artist_id': artist.artist_id},
+                    value={'artist_id': artist_track.artist_id},
                     key_schema=self.crawler_key_schema,
                     value_schema=self.artist_value_schema
                 )

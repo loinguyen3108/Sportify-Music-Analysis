@@ -17,6 +17,9 @@ clean:
 	find . -name '.pytest_cache' -delete
 	find . -name '*.pyc' -delete
 
+clear-cache:
+	rm -rf .cache-*
+
 deps: requirements.txt
 	echo "Installing dependencies..."
 	pip install -r requirements.txt

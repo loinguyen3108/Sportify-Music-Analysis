@@ -54,7 +54,7 @@ class SpotifyProducer:
         self.producer.flush()
 
     def produce(self, topic: str, key: dict, value: dict, key_schema, value_schema):
-        self.producer.poll(0.0)
         self.producer.produce(topic=topic, key=key, value=value,
                               key_schema=key_schema, value_schema=value_schema,
                               on_delivery=self.delivery_report)
+        self.producer.poll(0)

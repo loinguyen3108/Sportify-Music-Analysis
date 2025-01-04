@@ -15,13 +15,13 @@ class CrawlerFlow(BaseCrawler):
         from src.consumers.album import AlbumConsumer
         from src.infratructure.kafka.consumer import SpotifyConsumer
         return SpotifyConsumer(
-            topics=self.ALBUM_TOPICS,
+            topics=[self.T_ALBUM, self.T_ALBUM_TRACKS],
             group_id='album-consumer',
             messages_handler=AlbumConsumer().messages_handler,
-            num_messages=1
+            num_messages=20
         )
 
-    @ cached_property
+    @cached_property
     def artist_consumer(self):
         from src.consumers.artist import ArtistConsumer
         from src.infratructure.kafka.consumer import SpotifyConsumer
@@ -34,13 +34,13 @@ class CrawlerFlow(BaseCrawler):
 
     @cached_property
     def playlist_consumer(self):
-        from src.consumers.playlist import playlistConsumer
+        from src.consumers.playlist import PlaylistConsumer
         from src.infratructure.kafka.consumer import SpotifyConsumer
         return SpotifyConsumer(
             topics=self.PLAYLIST_TOPICS,
             group_id='playlist-consumer',
-            messages_handler=playlistConsumer().messages_handler,
-            num_messages=1
+            messages_handler=PlaylistConsumer().messages_handler,
+            num_messages=20
         )
 
     @cached_property
@@ -86,17 +86,36 @@ class CrawlerFlow(BaseCrawler):
     def ingest_track_plays_count(self):
         self.track_plays_count_consumer.consume_messages()
 
-    def ingest_artists_by_tag(self, tag_name: str, offset: int = 0):
-        if not tag_name:
-            raise ValueError('tag_name is required')
+    def ingest_albums_by_query(self, query: str, offset: int = 0):
+        if not query:
+            raise ValueError('query is required')
 
-        self.logger.info(f'Ingesting artists by tag: {tag_name}')
+        self.logger.info(f'Ingesting albums by query: {query}')
+        for albums in self.spotify_service.search_albums(
+                query=f'{query}', max_pages=20, offset=offset
+        ):
+            for album in albums:
+                self.spotify_producer.produce(
+                    topic=self.T_ALBUM_TRACKS,
+                    key={'timestamp': self.time_millis()},
+                    value={'album_id': album.album_id},
+                    key_schema=self.crawler_key_schema,
+                    value_schema=self.album_value_schema
+                )
+        self.spotify_producer.close()
+        self.logger.info(f'Ingested albums by query: {query}')
+
+    def ingest_artists_by_query(self, query_name: str, offset: int = 0):
+        if not query_name:
+            raise ValueError('query_name is required')
+
+        self.logger.info(f'Ingesting artists by query: {query_name}')
         for artists in self.spotify_service.search_artists(
-                query=f'tag:{tag_name}', max_items=self.CRAWLER_MAX_ITEMS, offset=offset
+                query=f'{query_name}', max_pages=20, offset=offset
         ):
             for artist in artists:
                 self.spotify_producer.produce(
-                    topic=self.T_ARTISTS,
+                    topic=self.T_ARTIST_WEB,
                     key={'timestamp': self.time_millis()},
                     value={'artist_id': artist.artist_id},
                     key_schema=self.crawler_key_schema,
@@ -110,17 +129,17 @@ class CrawlerFlow(BaseCrawler):
                     value_schema=self.artist_value_schema
                 )
         self.spotify_producer.close()
-        self.logger.info(f'Ingested artists by tag: {tag_name}')
+        self.logger.info(f'Ingested artists by query: {query_name}')
 
-    def ingest_playlists_by_tag(self, tag_name: str, offset: int = 0):
-        if not tag_name:
-            raise ValueError('tag_name is required')
+    def ingest_playlists_by_query(self, query: str, offset: int = 0):
+        if not query:
+            raise ValueError('query is required')
 
-        self.logger.info(f'Ingesting playlists by tag: {tag_name}')
+        self.logger.info(f'Ingesting playlists by query: {query}')
 
         unique_users = set()
         for playlists in self.spotify_service.search_playlists(
-                query=f'tag:{tag_name}', max_items=self.CRAWLER_MAX_ITEMS, offset=offset
+                query=f'{query}', max_pages=20, offset=offset
         ):
             for playlist in playlists:
                 self.spotify_producer.produce(
@@ -149,4 +168,17 @@ class CrawlerFlow(BaseCrawler):
             )
 
         self.spotify_producer.close()
-        self.logger.info(f'Ingested playlists by tag: {tag_name}')
+        self.logger.info(f'Ingested playlists by query: {query}')
+
+    def ingest_tracks_by_query(self, query: str, offset: int = 0):
+        if not query:
+            raise ValueError('query is required')
+
+        self.logger.info(f'Ingesting tracks by query: {query}')
+        for tracks in self.spotify_service.search_tracks(
+                query=f'{query}', max_pages=20, offset=offset
+        ):
+            for track in tracks:
+                self.produce_track(track)
+        self.spotify_producer.close()
+        self.logger.info(f'Ingested tracks by query: {query}')

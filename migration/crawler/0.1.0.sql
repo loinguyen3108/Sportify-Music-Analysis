@@ -4,15 +4,14 @@ CREATE TABLE IF NOT EXISTS public.album (
     album_id text NOT NULL primary key,
     created_at timestamp NOT NULL DEFAULT now(),
     updated_at timestamp NOT NULL DEFAULT now(),
-    album_type text NOT NULL,
-    available_markets text [] NOT NULL,
+    album_type text,
+    available_markets text [],
     url text NOT NULL,
     cover_image text,
     name text NOT NULL,
-    release_date text NOT NULL,
-    release_date_precision text NOT NULL,
+    release_date text,
+    release_date_precision text,
     restrictions text [],
-    artist_ids text [] NOT NULL,
     label text,
     popularity SMALLINT
 );
@@ -26,7 +25,8 @@ CREATE TABLE IF NOT EXISTS public.artist (
     genres text [],
     image text,
     name text,
-    popularity SMALLINT
+    popularity SMALLINT,
+    monthly_listeners bigint
 );
 -- Table: playlist
 CREATE TABLE IF NOT EXISTS public.playlist (
@@ -49,11 +49,10 @@ CREATE TABLE IF NOT EXISTS public.track (
     created_at timestamp NOT NULL DEFAULT now(),
     updated_at timestamp NOT NULL DEFAULT now(),
     album_id text NOT NULL,
-    artist_ids text [] NOT NULL,
-    available_markets text [] NOT NULL,
-    disc_number INTEGER NOT NULL,
+    available_markets text [],
+    disc_number INTEGER,
     duration_ms INTEGER NOT NULL,
-    explicit BOOLEAN NOT NULL,
+    explicit BOOLEAN,
     url text NOT NULL,
     name text NOT NULL,
     popularity SMALLINT,
@@ -67,7 +66,7 @@ CREATE TABLE IF NOT EXISTS public.playlist_track (
     track_id text NOT NULL,
     added_at text NOT NULL,
     added_by text NOT NULL,
-    url text NOT NULL,
+    url text,
     created_at TIMESTAMP DEFAULT now(),
     updated_at TIMESTAMP DEFAULT now(),
     primary key (
@@ -77,6 +76,28 @@ CREATE TABLE IF NOT EXISTS public.playlist_track (
 );
 CREATE INDEX IF NOT EXISTS idx_playlist_track_track_id
 ON public.playlist_track (track_id);
+-- Table: artist_album
+CREATE TABLE IF NOT EXISTS public.artist_album (
+    artist_id text NOT NULL,
+    album_id text NOT NULL,
+    created_at TIMESTAMP DEFAULT now(),
+    updated_at TIMESTAMP DEFAULT now(),
+    primary key (
+        artist_id,
+        album_id
+    )
+);
+-- Table: artist_track
+CREATE TABLE IF NOT EXISTS public.artist_track (
+    artist_id text NOT NULL,
+    track_id text NOT NULL,
+    created_at TIMESTAMP DEFAULT now(),
+    updated_at TIMESTAMP DEFAULT now(),
+    primary key (
+        artist_id,
+        track_id
+    )
+);
 -- Table: user
 CREATE TABLE IF NOT EXISTS public.user (
     user_id text NOT NULL primary key,

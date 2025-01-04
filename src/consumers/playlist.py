@@ -1,13 +1,14 @@
+from concurrent.futures import ThreadPoolExecutor
 from functools import cached_property
 
 from confluent_kafka.serialization import SerializationContext, MessageField
 from spotipy.exceptions import SpotifyException
 
-from src.crawler.models import Track
+from src.configs.kafka import CRAWL_STRATEGY
 from src.crawler.base import BaseCrawler
 
 
-class playlistConsumer(BaseCrawler):
+class PlaylistConsumer(BaseCrawler):
     def __init__(self):
         super().__init__()
 
@@ -16,7 +17,7 @@ class playlistConsumer(BaseCrawler):
         return self.get_deserialized(schema_name='playlist_value')
 
     def messages_handler(self, messages):
-        artist_ids = []
+        playlist_ids = set()
         for message in messages:
             if message is None:
                 continue
@@ -31,11 +32,12 @@ class playlistConsumer(BaseCrawler):
                 if topic == self.T_PLAYLIST:
                     self.ingest_playlist(playlist_id)
                 if topic == self.T_PLAYLIST_TRACKS:
-                    self.ingest_playlist_tracks(playlist_id)
+                    playlist_ids.add(playlist_id)
             except SpotifyException as e:
                 self.logger.error(e)
-        if artist_ids:
-            self.spotify_service.crawl_artists(artist_ids)
+        if playlist_ids and CRAWL_STRATEGY == 'web_api':
+            with ThreadPoolExecutor(max_workers=10) as executor:
+                executor.map(self.ingest_playlist_tracks, playlist_ids)
 
     def ingest_playlist(self, playlist_id: str):
         playlist = self.spotify_service.crawl_playlist(playlist_id)

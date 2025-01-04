@@ -1,8 +1,6 @@
 from functools import cached_property
-from typing import List
 
 from confluent_kafka.serialization import SerializationContext, MessageField
-from spotipy.exceptions import SpotifyException
 
 from src.crawler.base import BaseCrawler
 
