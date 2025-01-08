@@ -300,12 +300,15 @@ def parse_playlist_tracks_web(response) -> Union[None, Playlist]:
             except ValueError:
                 added_at = datetime.strptime(added_at_str.replace(
                     'Z', '+0000'), '%Y-%m-%dT%H:%M:%S.%f%z')
-            user = parse_user(item['addedBy']['data'])
+
+            user = parse_user(item['addedBy']['data']) \
+                if item.get('addedBy') else None
+            user_id = user.user_id if user else None
             playlist_track = PlaylistTrack(
                 playlist_id=playlist.playlist_id, track_id=track.track_id,
-                added_at=added_at, added_by=user.user_id
+                added_at=added_at, added_by=user_id
             )
-            if user.user_id != playlist.owner.user_id:
+            if user and user.user_id != playlist.owner.user_id:
                 users.append(user)
             tracks.append(track)
             playlist_tracks.append(playlist_track)

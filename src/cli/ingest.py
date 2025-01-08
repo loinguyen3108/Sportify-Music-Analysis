@@ -6,7 +6,7 @@ from src.crawler.flow import CrawlerFlow
 def main():
     arg_parser = ArgumentParser(description='Spotify Ingestor')
 
-    arg_parser.add_argument('-i', '--ingestor', choices=['album', 'artist', 'playlist'],
+    arg_parser.add_argument('-i', '--ingestor', choices=['album', 'artist', 'playlist', 'track'],
                             required=True, help='consume album, artist or playlist')
     arg_parser.add_argument('-q', '--query', type=str,
                             required=True, help='The query to ingest')
@@ -19,6 +19,8 @@ def main():
         flower.ingest_artists_by_query(args.query)
     if args.ingestor == 'playlist':
         flower.ingest_playlists_by_query(args.query)
+    if args.ingestor == 'track':
+        flower.ingest_tracks_by_query(args.query)
 
 
 if __name__ == '__main__':

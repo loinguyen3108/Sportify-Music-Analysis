@@ -100,12 +100,13 @@ class ArtistConsumer(BaseCrawler):
                     key_schema=self.crawler_key_schema,
                     value_schema=self.album_value_schema
                 )
-                artist_ids.extend([
-                    _id for _id in album.artist_ids if _id != artist_id])
+                if album.is_exists_column('artist_albums'):
+                    artist_ids.extend([
+                        artist.artist_id for artist in album.artist_albums])
 
         for artist_id in set(artist_ids):
             self.spotify_producer.produce(
-                topic=self.T_ARTIST_OFFICIAL,
+                topic=self.T_ARTIST_WEB,
                 key={'timestamp': self.time_millis()},
                 value={'artist_id': artist_id},
                 key_schema=self.crawler_key_schema,

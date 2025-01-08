@@ -10,5 +10,5 @@ class PlaylistTrack(Base, TimeTrackingMixin):
     playlist_id = Column(Text, primary_key=True, nullable=False)
     track_id = Column(Text, primary_key=True, nullable=False)
     added_at = Column(DateTime, nullable=False)
-    added_by = Column(Text, nullable=False)
+    added_by = Column(Text)
     url = Column(Text)

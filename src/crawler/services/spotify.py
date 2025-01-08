@@ -110,7 +110,7 @@ class SpotifyService(BaseService):
         parser = parse_albums_response
         pages = self._get_results_page(
             api=api, parser=parser, artist_id=artist_id, max_pages=max_pages, limit=self.DEFAULT_SEARCH_LIMIT,
-            offset=offset
+            offset=offset, strategy=OFFICIAL_API
         )
 
         crawled_albums = 0

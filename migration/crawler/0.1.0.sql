@@ -65,7 +65,7 @@ CREATE TABLE IF NOT EXISTS public.playlist_track (
     playlist_id text NOT NULL,
     track_id text NOT NULL,
     added_at text NOT NULL,
-    added_by text NOT NULL,
+    added_by text,
     url text,
     created_at TIMESTAMP DEFAULT now(),
     updated_at TIMESTAMP DEFAULT now(),
