@@ -1,0 +1,15 @@
+{
+    "namespace": "com.spotify.monitor",
+    "type": "record",
+    "name": "monitor.value",
+    "fields": [
+        {
+            "name": "object_name",
+            "type": "string"
+        },
+        {
+            "name": "object_value",
+            "type": "string"
+        }
+    ]
+}
