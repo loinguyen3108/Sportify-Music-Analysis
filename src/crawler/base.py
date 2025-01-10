@@ -13,6 +13,8 @@ from src.configs.logger import get_logger
 
 class BaseCrawler:
     CRAWLER_MAX_PAGES = 10_000
+
+    # Base topics
     T_ALBUM = 'spotify.crawl.albums'
     T_ALBUM_TRACKS = 'spotify.crawl.album.tracks'
     T_ARTIST_ALBUMS = 'spotify.crawl.artist.albums'
@@ -27,14 +29,21 @@ class BaseCrawler:
     ARTIST_TOPICS = [T_ARTIST_OFFICIAL, T_ARTIST_WEB, T_ARTIST_ALBUMS]
     PLAYLIST_TOPICS = [T_PLAYLIST, T_PLAYLIST_TRACKS]
     TRACK_TOPICS = [T_TRACK_WEB, T_TRACK_OFFICIAL]
+    T_MONITOR_OBJECT = 'spotify.monitor.object'
+
     TOPICS = (
+        # Base topics
         T_ARTIST_OFFICIAL, T_ARTIST_WEB, T_TRACK_OFFICIAL, T_TRACK_WEB, T_ALBUM_TRACKS, T_ARTIST_ALBUMS,
-        T_USER_PLAYLISTS, T_PLAYLIST_TRACKS
+        T_USER_PLAYLISTS, T_PLAYLIST_TRACKS,
+
+        # Monitor topics
+        T_MONITOR_OBJECT
     )
 
     crawler_key_schema = avro.load(f'{SCHEMA_FOLDER}/crawler_key.avsc')
     artist_value_schema = avro.load(f'{SCHEMA_FOLDER}/artist_value.avsc')
     album_value_schema = avro.load(f'{SCHEMA_FOLDER}/album_value.avsc')
+    monitor_value_schema = avro.load(f'{SCHEMA_FOLDER}/monitor_value.avsc')
     user_value_schema = avro.load(f'{SCHEMA_FOLDER}/user_value.avsc')
     playlist_value_schema = avro.load(f'{SCHEMA_FOLDER}/playlist_value.avsc')
     track_value_schema = avro.load(f'{SCHEMA_FOLDER}/track_value.avsc')
