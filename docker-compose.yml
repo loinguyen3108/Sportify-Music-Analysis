@@ -1,7 +1,7 @@
 services:
   pg-spotify:
     image: postgres:16
-    container_name: pg-airflow
+    container_name: pg-spotify
     hostname: pg-spotify
     restart: always
     environment:
@@ -10,32 +10,37 @@ services:
       - POSTGRES_DB=spotify
     ports:
       - "5433:5432"
+    command:
+      - postgres
+      - -c
+      - wal_level=logical
     volumes:
       - .docker/pg-spotify:/var/lib/postgresql/data
+      - ./containers/postgres/scripts:/docker-entrypoint-initdb.d
     healthcheck:
       test: [ "CMD", "pg_isready", "-U", "spotify" ]
       interval: 10s
       retries: 5
       start_period: 5s
 
-  pg-airflow:
-    image: postgres:16
-    container_name: pg-airflow
-    hostname: pg-airflow
-    restart: always
-    environment:
-      - POSTGRES_USER=airflow
-      - POSTGRES_PASSWORD=airflow
-      - POSTGRES_DB=airflow
-    ports:
-      - "5432:5432"
-    volumes:
-      - ./data/pg-postgresql:/var/lib/postgresql/data
-    healthcheck:
-      test: [ "CMD", "pg_isready", "-U", "airflow" ]
-      interval: 10s
-      retries: 5
-      start_period: 5s
+  # pg-airflow:
+  #   image: postgres:16
+  #   container_name: pg-airflow
+  #   hostname: pg-airflow
+  #   restart: always
+  #   environment:
+  #     - POSTGRES_USER=airflow
+  #     - POSTGRES_PASSWORD=airflow
+  #     - POSTGRES_DB=airflow
+  #   ports:
+  #     - "5432:5432"
+  #   volumes:
+  #     - ./data/pg-postgresql:/var/lib/postgresql/data
+  #   healthcheck:
+  #     test: [ "CMD", "pg_isready", "-U", "airflow" ]
+  #     interval: 10s
+  #     retries: 5
+  #     start_period: 5s
 
   minio:
     image: minio/minio
@@ -48,105 +53,131 @@ services:
       MINIO_ROOT_USER: minio
       MINIO_ROOT_PASSWORD: minio_admin
     volumes:
-      - ./data/minio:/data
+      - .docker/minio/data:/data
     command: server --address 0.0.0.0:10000 --console-address 0.0.0.0:10001 /data
 
-  airflow:
-    image: airflow:local
-    container_name: airflow
-    hostname: airflow
-    restart: always
+  create-buckets:
+    image: minio/mc
     depends_on:
-      - pg-airflow
-    environment:
-      - AIRFLOW__CORE__DAGS_FOLDER=/opt/airflow/dags # Path to DAGs, adjust to your needs
-      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
-      - AIRFLOW__CORE__ENABLE_XCOM_PICKLING=True
-      - AIRFLOW__CORE__LOAD_EXAMPLES=False
-      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@pg-airflow:5432/airflow
-      - AIRFLOW__API__AUTH_BACKENDS=airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session # Enable Basic Auth
-    env_file:
-      - containers/airflow/.env
-    volumes:
-      - ./src:/opt/airflow/nyc_taxi/src
-      - ./containers/jars:/home/airflow/jars
-    ports:
-      - "8080:8080"
-    entrypoint: /bin/bash
-    command:
-      - -c
-      - |
-        airflow db migrate
-        airflow users create --username admin --password admin --role Admin --email admin@admin.com --firstname admin --lastname admin
-        airflow standalone
-    healthcheck:
-      test: [ "CMD", "curl", "--fail", "http://localhost:8080/health" ]
-      interval: 30s
-      timeout: 10s
-      retries: 5
+      - minio
+    entrypoint: >
+      /bin/sh -c " /usr/bin/mc config host add myminio http://minio:10000 minio minio_admin; /usr/bin/mc admin info myminio; /usr/bin/mc mb myminio/clickhouse; /usr/bin/mc mb myminio/nyc-taxi; /usr/bin/mc anonymous set public myminio/clickhouse; exit 0; "
 
-  spark-master:
-    image: spark:local
-    container_name: spark-master
+  clickhouse:
+    image: clickhouse/clickhouse-server
     user: root
-    hostname: spark
-    environment:
-      - SPARK_MODE=master
-      - SPARK_RPC_AUTHENTICATION_ENABLED=no
-      - SPARK_RPC_ENCRYPTION_ENABLED=no
-      - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
-      - SPARK_SSL_ENABLED=no
-    env_file:
-      - containers/spark/.env
+    privileged: true
+    container_name: clickhouse
+    hostname: clickhouse
     volumes:
-      - ./src:/usr/local/src
-      - ./containers/spark/spark-defaults.conf:/opt/bitnami/spark/conf/spark-defaults.conf
+      - ./containers/clickhouse/fs/volumes/clickhouse/etc/clickhouse-server/config.d/config.xml:/etc/clickhouse-server/config.d/config.xml
+      - ./containers/clickhouse/fs/volumes/clickhouse/etc/clickhouse-server/users.d/users.xml:/etc/clickhouse-server/users.d/users.xml
+      - ./containers/clickhouse/fs/volumes/clickhouse/docker-entrypoint-initdb.d:/docker-entrypoint-initdb.d
+      - .docker/clickhouse/data:/var/lib/clickhouse
+      - .docker/clickhouse/log:/var/log/clickhouse-server
     ports:
-      - "8181:8080"
-      - "7077:7077"
-      - "4040:4040"
+      - '8123:8123'
+      - '9000:9000'
+    depends_on:
+      - minio
+      - create-buckets
 
-  spark-worker-1:
-    image: spark:local
-    container_name: spark-worker-1
-    user: root
-    environment:
-      - SPARK_MODE=worker
-      - SPARK_MASTER_URL=spark://spark:7077
-      - SPARK_WORKER_MEMORY=2G
-      - SPARK_WORKER_CORES=1
-      - SPARK_RPC_AUTHENTICATION_ENABLED=no
-      - SPARK_RPC_ENCRYPTION_ENABLED=no
-      - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
-      - SPARK_SSL_ENABLED=no
-    env_file:
-      - containers/spark/.env
-    volumes:
-      - ./src:/usr/local/src
-      - ./containers/spark/spark-defaults.conf:/opt/bitnami/spark/conf/spark-defaults.conf
-    ports:
-      - "8182:8081"
+  # airflow:
+  #   image: airflow:local
+  #   container_name: airflow
+  #   hostname: airflow
+  #   restart: always
+  #   depends_on:
+  #     - pg-airflow
+  #   environment:
+  #     - AIRFLOW__CORE__DAGS_FOLDER=/opt/airflow/dags # Path to DAGs, adjust to your needs
+  #     - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+  #     - AIRFLOW__CORE__ENABLE_XCOM_PICKLING=True
+  #     - AIRFLOW__CORE__LOAD_EXAMPLES=False
+  #     - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@pg-airflow:5432/airflow
+  #     - AIRFLOW__API__AUTH_BACKENDS=airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session # Enable Basic Auth
+  #   env_file:
+  #     - containers/airflow/.env
+  #   volumes:
+  #     - ./src:/opt/airflow/nyc_taxi/src
+  #     - ./containers/jars:/home/airflow/jars
+  #   ports:
+  #     - "8080:8080"
+  #   entrypoint: /bin/bash
+  #   command:
+  #     - -c
+  #     - |
+  #       airflow db migrate
+  #       airflow users create --username admin --password admin --role Admin --email admin@admin.com --firstname admin --lastname admin
+  #       airflow standalone
+  #   healthcheck:
+  #     test: [ "CMD", "curl", "--fail", "http://localhost:8080/health" ]
+  #     interval: 30s
+  #     timeout: 10s
+  #     retries: 5
 
-  spark-worker-2:
-    image: spark:local
-    container_name: spark-worker-2
-    user: root
-    environment:
-      - SPARK_MODE=worker
-      - SPARK_MASTER_URL=spark://spark:7077
-      - SPARK_WORKER_MEMORY=2G
-      - SPARK_WORKER_CORES=1
-      - SPARK_RPC_AUTHENTICATION_ENABLED=no
-      - SPARK_RPC_ENCRYPTION_ENABLED=no
-      - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
-      - SPARK_SSL_ENABLED=no
-    env_file:
-      - containers/spark/.env
-    volumes:
-      - ./src:/usr/local/src
-      - ./containers/spark/spark-defaults.conf:/opt/bitnami/spark/conf/spark-defaults.conf
-    ports:
-      - "8183:8081"
+  # spark-master:
+  #   image: spark:local
+  #   container_name: spark-master
+  #   user: root
+  #   hostname: spark
+  #   environment:
+  #     - SPARK_MODE=master
+  #     - SPARK_RPC_AUTHENTICATION_ENABLED=no
+  #     - SPARK_RPC_ENCRYPTION_ENABLED=no
+  #     - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
+  #     - SPARK_SSL_ENABLED=no
+  #   env_file:
+  #     - containers/spark/.env
+  #   volumes:
+  #     - ./src:/usr/local/src
+  #     - ./containers/spark/spark-defaults.conf:/opt/bitnami/spark/conf/spark-defaults.conf
+  #   ports:
+  #     - "8181:8080"
+  #     - "7077:7077"
+  #     - "4040:4040"
+
+  # spark-worker-1:
+  #   image: spark:local
+  #   container_name: spark-worker-1
+  #   user: root
+  #   environment:
+  #     - SPARK_MODE=worker
+  #     - SPARK_MASTER_URL=spark://spark:7077
+  #     - SPARK_WORKER_MEMORY=2G
+  #     - SPARK_WORKER_CORES=1
+  #     - SPARK_RPC_AUTHENTICATION_ENABLED=no
+  #     - SPARK_RPC_ENCRYPTION_ENABLED=no
+  #     - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
+  #     - SPARK_SSL_ENABLED=no
+  #   env_file:
+  #     - containers/spark/.env
+  #   volumes:
+  #     - ./src:/usr/local/src
+  #     - ./containers/spark/spark-defaults.conf:/opt/bitnami/spark/conf/spark-defaults.conf
+  #   ports:
+  #     - "8182:8081"
+
+  # spark-worker-2:
+  #   image: spark:local
+  #   container_name: spark-worker-2
+  #   user: root
+  #   environment:
+  #     - SPARK_MODE=worker
+  #     - SPARK_MASTER_URL=spark://spark:7077
+  #     - SPARK_WORKER_MEMORY=2G
+  #     - SPARK_WORKER_CORES=1
+  #     - SPARK_RPC_AUTHENTICATION_ENABLED=no
+  #     - SPARK_RPC_ENCRYPTION_ENABLED=no
+  #     - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
+  #     - SPARK_SSL_ENABLED=no
+  #   env_file:
+  #     - containers/spark/.env
+  #   volumes:
+  #     - ./src:/usr/local/src
+  #     - ./containers/spark/spark-defaults.conf:/opt/bitnami/spark/conf/spark-defaults.conf
+  #   ports:
+  #     - "8183:8081"
 
   zookeeper:
     image: confluentinc/cp-zookeeper:7.5.5
@@ -275,6 +306,8 @@ services:
       - |
         echo "Installing connector plugins"
         confluent-hub install --no-prompt debezium/debezium-connector-postgresql:2.5.4
+        confluent-hub install --no-prompt clickhouse/clickhouse-kafka-connect:v1.2.6
+
         #
         echo "Launching Kafka Connect worker"
         /etc/confluent/docker/run &

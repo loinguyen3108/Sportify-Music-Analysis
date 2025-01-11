@@ -7,6 +7,7 @@ from typing import Any, Iterator, List, Union
 
 import requests
 from requests.exceptions import Timeout, ConnectionError, RequestException
+from sqlalchemy import text
 
 from src.configs.crawler import SPOTIFY_CACHE_USERNAME, SPOTIFY_CLIENT_ID,  \
     SPOTIFY_CLIENT_SECRET, SPOTIFY_REDIRECT_URI, SPOTIFY_WEB_API, T_ALBUM, T_ARTIST, \
@@ -33,6 +34,8 @@ class SpotifyService(BaseService):
 
     DEFAULT_SEARCH_LIMIT = 50
     DEFAULT_MAX_PAGES = 10_000_000
+
+    QUERY = 'SELECT %s_id FROM %s'
 
     def __init__(self):
         super().__init__()
@@ -63,20 +66,33 @@ class SpotifyService(BaseService):
         self.client.track('7Kk581xmajJZNYit8Ssrtd')
         self.logger.info('Authenticated')
 
-    def crawl_albums(self, album_ids: List[str]) -> Union[None, List[Album]]:
+    def crawl_albums(self, album_ids: List[str], refresh: bool = False) -> Union[None, List[Album]]:
+        """Crawl albums by album ids, only support 20 ids per request via official api
+
+        Args:
+            album_ids (List[str]): A list of album ids
+            refresh (bool, optional): Whether to recrawl. Defaults to False.
+
+        Raises:
+            ValueError: If album_ids is empty
+
+        Returns:
+            Union[None, List[Album]]: A list of albums or None
+        """
         if not album_ids:
             raise ValueError('album_ids is required')
 
         func_name = 'crawl_albums'
         main_arg_name = 'album_id'
-        album_ids = [
-            album_id for album_id in album_ids
-            if self.should_crawl(func_name=func_name, main_arg_name=main_arg_name,
-                                 main_arg_value=album_id)
-        ]
-        if not album_ids:
-            self.logger.info(f'Already crawled {len(album_ids)} albums')
-            return
+        if not refresh:
+            album_ids = [
+                album_id for album_id in album_ids
+                if self.should_crawl(func_name=func_name, main_arg_name=main_arg_name,
+                                     main_arg_value=album_id)
+            ]
+            if not album_ids:
+                self.logger.info(f'Already crawled {len(album_ids)} albums')
+                return
 
         self.logger.info(f'Crawling albums with {len(album_ids)} ids')
         crawled_albums = []
@@ -93,14 +109,35 @@ class SpotifyService(BaseService):
             self._delay_request()
         return crawled_albums
 
-    def crawl_albums_by_artist_id(self, artist_id: str, max_pages: int = DEFAULT_MAX_PAGES,
-                                  offset: int = 0, strategy: str = WEB_API) -> Union[None, Iterator[List[Album]]]:
+    def crawl_albums_by_artist_id(
+        self, artist_id: str, max_pages: int = DEFAULT_MAX_PAGES, offset: int = 0, refresh: bool = False,
+        strategy: str = WEB_API
+    ) -> Union[None, Iterator[List[Album]]]:
+        """Crawl albums by artist id
+
+        Args:
+            artist_id (str): Artist id
+            max_pages (int, optional): Maximum number of pages. Defaults to DEFAULT_MAX_PAGES.
+            offset (int, optional): The offset to start. Defaults to 0.
+            refresh (bool, optional): Whether to recrawl. Defaults to False.
+
+        Raises:
+            ValueError: If artist_id is empty
+
+        Returns:
+            Union[None, Iterator[List[Album]]]: A list of albums or None
+
+        Yields:
+            Iterator[Union[None, Iterator[List[Album]]]]: A list of albums
+        """
+
         if not artist_id:
             raise ValueError('artist_id is required')
 
         func_name = 'crawl_albums_by_artist_id'
         main_arg_name = 'artist_id'
-        if not self.should_crawl(func_name=func_name, main_arg_name=main_arg_name, main_arg_value=artist_id):
+        if not refresh and not self.should_crawl(
+                func_name=func_name, main_arg_name=main_arg_name, main_arg_value=artist_id):
             self.logger.info(
                 f'Already crawled albums for artist with id: {artist_id}')
             return
@@ -141,13 +178,26 @@ class SpotifyService(BaseService):
         self.track_func(func_name=func_name, main_arg_name=main_arg_name,
                         main_arg_value=artist_id)
 
-    def crawl_artist(self, artist_id: str) -> Union[None, Artist]:
+    def crawl_artist(self, artist_id: str, refresh: bool = False) -> Union[None, Artist]:
+        """Crawl artist by artist id via web api
+
+        Args:
+            artist_id (str): Artist id
+            refresh (bool, optional): Whether to recrawl. Defaults to False.
+
+        Raises:
+            ValueError: If artist_id is empty
+
+        Returns:
+            Union[None, Artist]: An artist or None
+        """
         if not artist_id:
             raise ValueError('artist_id is required')
 
         func_name = 'crawl_artist'
         main_arg_name = 'artist_id'
-        if not self.should_crawl(func_name=func_name, main_arg_name=main_arg_name, main_arg_value=artist_id):
+        if not refresh and not self.should_crawl(
+                func_name=func_name, main_arg_name=main_arg_name, main_arg_value=artist_id):
             self.logger.info(f'Already crawled artist with id: {artist_id}')
             return
 
@@ -165,21 +215,34 @@ class SpotifyService(BaseService):
         self.track_func(func_name=func_name, main_arg_name=main_arg_name,
                         main_arg_value=artist_id)
 
-    def crawl_artists(self, artist_ids: List[str]) -> Union[None, List[Artist]]:
+    def crawl_artists(self, artist_ids: List[str], refresh: bool = False) -> Union[None, List[Artist]]:
+        """Crawl artists by artist ids via official api
+
+        Args:
+            artist_ids (List[str]): A list of artist ids
+            refresh (bool, optional): Whether to recrawl. Defaults to False.
+
+        Raises:
+            ValueError: If artist_ids is empty
+
+        Returns:
+            Union[None, List[Artist]]: A list of artists or None
+        """
         if not artist_ids:
             raise ValueError('artist_ids is required')
 
         func_name = 'crawl_artists'
         main_arg_name = 'artist_id'
-        artist_ids = [
-            artist_id for artist_id in artist_ids
-            if self.should_crawl(func_name=func_name, main_arg_name=main_arg_name,
-                                 main_arg_value=artist_id)
-        ]
-        if not artist_ids:
-            self.logger.info(
-                f'Already crawled artists with {len(artist_ids)} ids')
-            return
+        if not refresh:
+            artist_ids = [
+                artist_id for artist_id in artist_ids
+                if self.should_crawl(func_name=func_name, main_arg_name=main_arg_name,
+                                     main_arg_value=artist_id)
+            ]
+            if not artist_ids:
+                self.logger.info(
+                    f'Already crawled artists with {len(artist_ids)} ids')
+                return
 
         self.logger.info(f'Crawling artists with {len(artist_ids)} ids')
         crawled_artists = []
@@ -196,13 +259,26 @@ class SpotifyService(BaseService):
             self._delay_request()
         return crawled_artists
 
-    def crawl_playlist(self, playlist_id: str) -> Union[None, Playlist]:
+    def crawl_playlist(self, playlist_id: str, refresh: bool = False) -> Union[None, Playlist]:
+        """Crawl playlist by playlist id via web api
+
+        Args:
+            playlist_id (str): Playlist id
+            refresh (bool, optional): Whether to recrawl. Defaults to False.
+
+        Raises:
+            ValueError: If playlist_id is empty
+
+        Returns:
+            Union[None, Playlist]: A playlist or None
+        """
         if not playlist_id:
             raise ValueError('playlist_id is required')
 
         func_name = 'crawl_playlist'
         main_arg_name = 'playlist_id'
-        if not self.should_crawl(func_name=func_name, main_arg_name=main_arg_name, main_arg_value=playlist_id):
+        if not refresh and not self.should_crawl(
+                func_name=func_name, main_arg_name=main_arg_name, main_arg_value=playlist_id):
             self.logger.info(
                 f'Already crawled playlist with id: {playlist_id}')
             return
@@ -218,14 +294,35 @@ class SpotifyService(BaseService):
             self._delay_request()
         return playlist
 
-    def crawl_playlist_tracks(self, playlist_id: str, max_pages: int = DEFAULT_MAX_PAGES,
-                              offset: int = 0, strategy: str = WEB_API) -> Union[None, Iterator[List[Track]]]:
+    def crawl_playlist_tracks(
+            self, playlist_id: str, max_pages: int = DEFAULT_MAX_PAGES, offset: int = 0, strategy: str = WEB_API,
+            refresh: bool = False
+    ) -> Union[None, Iterator[List[Track]]]:
+        """Crawl playlist tracks by playlist id.
+
+        Args:
+            playlist_id (str): Playlist id
+            max_pages (int, optional): Maximum number of pages. Defaults to DEFAULT_MAX_PAGES.
+            offset (int, optional): The offset to start. Defaults to 0.
+            strategy (str, optional): The strategy to use for fetching playlist tracks. Defaults to WEB_API.
+            refresh (bool, optional): Whether to recrawl. Defaults to False.
+
+        Raises:
+            ValueError: If playlist_id is empty
+
+        Returns:
+            Union[None, Iterator[List[Track]]]: A list of tracks or None
+
+        Yields:
+            Iterator[Union[None, Iterator[List[Track]]]]: A list of tracks or None
+        """
         if not playlist_id:
             raise ValueError('playlist_id is required')
 
         func_name = 'crawl_playlist_tracks'
         main_arg_name = 'playlist_id'
-        if not self.should_crawl(func_name=func_name, main_arg_name=main_arg_name, main_arg_value=playlist_id):
+        if not refresh and not self.should_crawl(
+                func_name=func_name, main_arg_name=main_arg_name, main_arg_value=playlist_id):
             self.logger.info(
                 f'Already crawled playlist tracks for playlist with id: {playlist_id}')
             return
@@ -262,13 +359,28 @@ class SpotifyService(BaseService):
                         main_arg_value=playlist_id)
 
     def crawl_playlists_by_user_id(self, user_id: str, max_pages: int = DEFAULT_MAX_PAGES,
-                                   offset: int = 0) -> Union[None, List[Playlist]]:
+                                   offset: int = 0, refresh: bool = False) -> Union[None, List[Playlist]]:
+        """Crawl playlists by user id via official api
+
+        Args:
+            user_id (str): User id
+            max_pages (int, optional): Maximum number of pages. Defaults to DEFAULT_MAX_PAGES.
+            offset (int, optional): The offset to start. Defaults to 0.
+            refresh (bool, optional): Whether to recrawl. Defaults to False.
+
+        Raises:
+            ValueError: If user_id is empty
+
+        Returns:
+            Union[None, List[Playlist]]: A list of playlists or None
+        """
         if not user_id:
             raise ValueError('user_id is required')
 
         func_name = 'crawl_playlists_by_user_id'
         main_arg_name = 'user_id'
-        if not self.should_crawl(func_name=func_name, main_arg_name=main_arg_name, main_arg_value=user_id):
+        if not refresh and not self.should_crawl(
+                func_name=func_name, main_arg_name=main_arg_name, main_arg_value=user_id):
             self.logger.info(
                 f'Already crawled playlists for user with id: {user_id}')
             return
@@ -291,13 +403,26 @@ class SpotifyService(BaseService):
                         main_arg_value=user_id)
         return crawled_playlists
 
-    def crawl_track(self, track_id: str) -> Union[None, Track]:
+    def crawl_track(self, track_id: str, refresh: bool = False) -> Union[None, Track]:
+        """Crawl track by track id via web api
+
+        Args:
+            track_id (str): Track id
+            refresh (bool, optional): Whether to recrawl. Defaults to False.
+
+        Raises:
+            ValueError: If track_id is empty
+
+        Returns:
+            Union[None, Track]: A track or None
+        """
         if not track_id:
             raise ValueError('track_id is required')
 
         func_name = 'crawl_track'
         main_arg_name = 'track_id'
-        if not self.should_crawl(func_name=func_name, main_arg_name=main_arg_name, main_arg_value=track_id):
+        if not refresh and not self.should_crawl(
+                func_name=func_name, main_arg_name=main_arg_name, main_arg_value=track_id):
             self.logger.info(f'Already crawled track with id: {track_id}')
             return
 
@@ -317,20 +442,33 @@ class SpotifyService(BaseService):
                         main_arg_value=track_id)
         return track
 
-    def crawl_tracks(self, track_ids: List[str]) -> Union[None, List[Track]]:
+    def crawl_tracks(self, track_ids: List[str], refresh: bool = False) -> Union[None, List[Track]]:
+        """Crawl tracks by track ids via official api
+
+        Args:
+            track_ids (List[str]): A list of track ids
+            refresh (bool, optional): Whether to recrawl. Defaults to False.
+
+        Raises:
+            ValueError: If track_ids is empty
+
+        Returns:
+            Union[None, List[Track]]: A list of tracks or None
+        """
         if not track_ids:
             raise ValueError('track_ids is required')
 
         func_name = 'crawl_tracks'
         main_arg_name = 'track_id'
-        track_ids = [
-            track_id for track_id in track_ids
-            if self.should_crawl(func_name=func_name, main_arg_name=main_arg_name,
-                                 main_arg_value=track_id)
-        ]
-        if not track_ids:
-            self.logger.info(f'Already crawled {len(track_ids)} tracks')
-            return
+        if not refresh:
+            track_ids = [
+                track_id for track_id in track_ids
+                if self.should_crawl(func_name=func_name, main_arg_name=main_arg_name,
+                                     main_arg_value=track_id)
+            ]
+            if not track_ids:
+                self.logger.info(f'Already crawled {len(track_ids)} tracks')
+                return
 
         self.logger.info(f'Crawling tracks with {len(track_ids)} ids')
         crawled_tracks = []
@@ -348,14 +486,35 @@ class SpotifyService(BaseService):
             self._delay_request()
         return crawled_tracks
 
-    def crawl_tracks_by_album_id(self, album_id: str, max_pages: int = DEFAULT_MAX_PAGES,
-                                 offset: int = 0, strategy: str = WEB_API) -> Union[None, Iterator[List[Track]]]:
+    def crawl_tracks_by_album_id(
+            self, album_id: str, max_pages: int = DEFAULT_MAX_PAGES, offset: int = 0, strategy: str = WEB_API,
+            refresh: bool = False
+    ) -> Union[None, Iterator[List[Track]]]:
+        """Crawl tracks by album id
+
+        Args:
+            album_id (str): Album id
+            max_pages (int, optional): Maximum number of pages. Defaults to DEFAULT_MAX_PAGES.
+            offset (int, optional): The offset to start. Defaults to 0.
+            strategy (str, optional): The strategy to use for fetching playlist tracks. Defaults to WEB_API.
+            refresh (bool, optional): Whether to recrawl. Defaults to False.
+
+        Raises:
+            ValueError: If album_id is empty
+
+        Returns:
+            Union[None, Iterator[List[Track]]]: A list of tracks or None
+
+        Yields:
+            Iterator[Union[None, Iterator[List[Track]]]]: A list of tracks
+        """
         if not album_id:
             raise ValueError('album_id is required')
 
         func_name = 'crawl_tracks_by_album_id'
         main_arg_name = 'album_id'
-        if not self.should_crawl(func_name=func_name, main_arg_name=main_arg_name, main_arg_value=album_id):
+        if not refresh and not self.should_crawl(
+                func_name=func_name, main_arg_name=main_arg_name, main_arg_value=album_id):
             self.logger.info(
                 f'Already crawled tracks for album with id: {album_id}')
             return
@@ -393,6 +552,17 @@ class SpotifyService(BaseService):
                         main_arg_value=album_id)
 
     def crawl_track_plays_count_by_id(self, track_id: str) -> Union[None, Track]:
+        """Crawl track plays_count via self host web api
+
+        Args:
+            track_id (str): Track id
+
+        Raises:
+            ValueError: If track_id is empty
+
+        Returns:
+            Union[None, Track]: A track or None
+        """
         if not track_id:
             raise ValueError('track_id is required')
 
@@ -461,16 +631,44 @@ class SpotifyService(BaseService):
 
         return self.access_token
 
+    def monitor_crawler(self, object_name: str, object_value: str):
+        if not object_name or not object_value:
+            raise ValueError('object_name and object_value are required')
+
+        self.logger.info(f'Crawling {object_name} with id: {object_value}')
+        if object_name == 'artist':
+            self.crawl_artist(artist_id=object_value, refresh=True)
+        elif object_name == 'playlist':
+            self.crawl_playlist_tracks(
+                playlist_id=object_value, max_pages=1, refresh=True)
+        elif object_name == 'track':
+            self.crawl_track(track_id=object_value, refresh=True)
+        else:
+            raise ValueError(f'Invalid object_name: {object_name}')
+
+        self.logger.info(
+            f'Finished crawling {object_name} with id: {object_value}')
+
     def search_albums(self, query: str, max_pages: int = DEFAULT_MAX_PAGES,
                       offset: int = 0) -> Union[None, Iterator[List[Album]]]:
+        """Search albums via official api
+
+        Args:
+            query (str): Album query
+            max_pages (int, optional): Maximum number of pages. Defaults to DEFAULT_MAX_PAGES.
+            offset (int, optional): The offset to start. Defaults to 0.
+
+        Raises:
+            ValueError: If query is empty
+
+        Returns:
+            Union[None, Iterator[List[Album]]]: A list of albums
+
+        Yields:
+            Iterator[Union[None, Iterator[List[Album]]]]: A list of albums
+        """
         if not query:
             raise ValueError('query is required')
-
-        func_name = 'search_albums'
-        main_arg_name = 'query'
-        if not self.should_crawl(func_name=func_name, main_arg_name=main_arg_name, main_arg_value=query):
-            self.logger.info(f'Already crawled albums with query: {query}')
-            return
 
         api = self.client.search
         parser = parse_search_albums_response
@@ -487,19 +685,27 @@ class SpotifyService(BaseService):
             yield stored_albums
 
         self.logger.info(f'Found {crawled_albums} albums')
-        self.track_func(func_name=func_name, main_arg_name=main_arg_name,
-                        main_arg_value=query)
 
     def search_artists(self, query: str, max_pages: int = DEFAULT_MAX_PAGES,
                        offset: int = 0) -> Union[None, Iterator[List[Artist]]]:
+        """Search artists via official api
+
+        Args:
+            query (str): Artist query
+            max_pages (int, optional): Maximum number of pages. Defaults to DEFAULT_MAX_PAGES.
+            offset (int, optional): The offset to start. Defaults to 0.
+
+        Raises:
+            ValueError: If query is empty
+
+        Returns:
+            Union[None, Iterator[List[Artist]]]: A list of artists
+
+        Yields:
+            Iterator[Union[None, Iterator[List[Artist]]]]: A list of artists
+        """
         if not query:
             raise ValueError('query is required')
-
-        func_name = 'search_artists'
-        main_arg_name = 'query'
-        if not self.should_crawl(func_name=func_name, main_arg_name=main_arg_name, main_arg_value=query):
-            self.logger.info(f'Already crawled artists with query: {query}')
-            return
 
         self.logger.info(f'Searching artists with query: {query} '
                          f'with (max_pages: {max_pages}, offset: {offset})')
@@ -518,11 +724,25 @@ class SpotifyService(BaseService):
             yield stored_artists
 
         self.logger.info(f'Found {crawled_artists} artists')
-        self.track_func(func_name=func_name, main_arg_name=main_arg_name,
-                        main_arg_value=query)
 
     def search_playlists(self, query: str, max_pages: int = DEFAULT_MAX_PAGES,
                          offset: int = 0) -> Union[None, Iterator[List[Playlist]]]:
+        """Search playlists via official api
+
+        Args:
+            query (str): Playlist query
+            max_pages (int, optional): Maximum number of pages. Defaults to DEFAULT_MAX_PAGES.
+            offset (int, optional): The offset to start. Defaults to 0.
+
+        Raises:
+            ValueError: If query is empty
+
+        Returns:
+            Union[None, Iterator[List[Playlist]]]: A list of playlists
+
+        Yields:
+            Iterator[Union[None, Iterator[List[Playlist]]]]: A list of playlists
+        """
         if not query:
             raise ValueError('query is required')
 
@@ -544,6 +764,22 @@ class SpotifyService(BaseService):
 
     def search_tracks(self, query: str, max_pages: int = DEFAULT_MAX_PAGES,
                       offset: int = 0) -> Union[None, Iterator[List[Playlist]]]:
+        """Search tracks via official api
+
+        Args:
+            query (str): Track query
+            max_pages (int, optional): Maximum number of pages. Defaults to DEFAULT_MAX_PAGES.
+            offset (int, optional): The offset to start. Defaults to 0.
+
+        Raises:
+            ValueError: If query is empty
+
+        Returns:
+            Union[None, Iterator[List[Playlist]]]: A list of tracks or None
+
+        Yields:
+            Iterator[Union[None, Iterator[List[Playlist]]]]: A list of tracks or None
+        """
         if not query:
             raise ValueError('query is required')
 
@@ -561,6 +797,23 @@ class SpotifyService(BaseService):
             crawled_tracks += len(stored_tracks)
             yield stored_tracks
         self.logger.info(f'Found {crawled_tracks} tracks')
+
+    def get_monitor_messages(self, object_name: str):
+        func_name = 'get_monitor_messages'
+        main_arg_name = 'object_name'
+        self.logger.info(f'Get for object_name: {object_name}')
+        if self.find_crawler_tracking_today(
+                func_name=func_name, main_arg_name=main_arg_name, main_arg_value=object_name):
+            self.logger.info(
+                f'Already get for object_name: {object_name} today')
+            return
+
+        query = self.QUERY % (object_name, object_name)
+        object_ids = self.repo.session.execute(text(query)).scalars().all()
+        self.track_func(func_name=func_name, main_arg_name=main_arg_name,
+                        main_arg_value=object_name)
+        self.logger.info(f'Found {len(object_ids)} ids for {object_name}.')
+        return object_ids
 
     def _delay_request(self):
         random_delay = random.uniform(self.MIN_DELAY, self.MAX_DELAY)
@@ -698,6 +951,16 @@ class SpotifyService(BaseService):
             CrawlerTracking.function_name == func_name,
             CrawlerTracking.main_arg_name == main_arg_name,
             CrawlerTracking.main_arg_value == main_arg_value
+        )
+
+    def find_crawler_tracking_today(self, func_name: str, main_arg_name: str,
+                                    main_arg_value: str) -> CrawlerTracking:
+        return self.repo.find_one(
+            CrawlerTracking,
+            CrawlerTracking.function_name == func_name,
+            CrawlerTracking.main_arg_name == main_arg_name,
+            CrawlerTracking.main_arg_value == main_arg_value,
+            CrawlerTracking.tracked_at == date.today()
         )
 
     def find_track_by_id(self, track_id: str) -> Track:

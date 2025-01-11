@@ -1,5 +1,6 @@
 from functools import cached_property
 
+from src.configs.crawler import T_ARTIST, T_PLAYLIST, T_TRACK
 from src.crawler.base import BaseCrawler
 from src.configs.logger import get_logger
 
@@ -18,7 +19,7 @@ class CrawlerFlow(BaseCrawler):
             topics=[self.T_ALBUM, self.T_ALBUM_TRACKS],
             group_id='album-consumer',
             messages_handler=AlbumConsumer().messages_handler,
-            num_messages=20
+            num_messages=200
         )
 
     @cached_property
@@ -43,7 +44,19 @@ class CrawlerFlow(BaseCrawler):
             num_messages=100
         )
 
-    @cached_property
+    @ cached_property
+    def monitor_consumer(self):
+        from src.consumers.monitor import MonitorConsumer
+        from src.infratructure.kafka.consumer import SpotifyConsumer
+        return SpotifyConsumer(
+            topics=[self.T_MONITOR_OBJECT],
+            group_id='monitor-consumer',
+            messages_handler=MonitorConsumer().messages_handler,
+            num_messages=1000
+
+        )
+
+    @ cached_property
     def playlist_consumer(self):
         from src.consumers.playlist import PlaylistConsumer
         from src.infratructure.kafka.consumer import SpotifyConsumer
@@ -54,7 +67,7 @@ class CrawlerFlow(BaseCrawler):
             num_messages=20
         )
 
-    @cached_property
+    @ cached_property
     def track_consumer(self):
         from src.consumers.track import TrackConsumer
         from src.infratructure.kafka.consumer import SpotifyConsumer
@@ -63,17 +76,6 @@ class CrawlerFlow(BaseCrawler):
             group_id='track-consumer',
             messages_handler=TrackConsumer().messages_handler,
             num_messages=50
-        )
-
-    @cached_property
-    def track_plays_count_consumer(self):
-        from src.consumers.track_plays_count import TrackPlaysCountConsumer
-        from src.infratructure.kafka.consumer import SpotifyConsumer
-        return SpotifyConsumer(
-            topics=[self.T_TRACK_PLAYS_COUNT],
-            group_id='track_plays_count-consumer',
-            messages_handler=TrackPlaysCountConsumer().messages_handler,
-            num_messages=1
         )
 
     def _prepare_spotify_topics(self):
@@ -96,9 +98,6 @@ class CrawlerFlow(BaseCrawler):
 
     def ingest_tracks(self):
         self.track_consumer.consume_messages()
-
-    def ingest_track_plays_count(self):
-        self.track_plays_count_consumer.consume_messages()
 
     def ingest_albums_by_query(self, query: str, offset: int = 0):
         if not query:
@@ -196,3 +195,24 @@ class CrawlerFlow(BaseCrawler):
                 self.produce_track(track)
         self.spotify_producer.close()
         self.logger.info(f'Ingested tracks by query: {query}')
+
+    def monitor_object_consumer(self):
+        self.monitor_consumer.consume_messages()
+
+    def produce_monitor_messages(self):
+        self.logger.info('Producing monitor messages...')
+        for obj_name in [T_ARTIST, T_PLAYLIST, T_TRACK]:
+            object_ids = self.spotify_service.get_monitor_messages(
+                object_name=obj_name)
+            if not object_ids:
+                continue
+
+            for obj_id in object_ids:
+                self.spotify_producer.produce(
+                    topic=self.T_MONITOR_OBJECT,
+                    key={'timestamp': self.time_millis()},
+                    value={'object_name': obj_name,
+                           'object_value': obj_id},
+                    key_schema=self.crawler_key_schema,
+                    value_schema=self.monitor_value_schema
+                )
