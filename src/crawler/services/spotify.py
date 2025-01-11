@@ -13,15 +13,15 @@ from src.configs.crawler import SPOTIFY_CACHE_USERNAME, SPOTIFY_CLIENT_ID,  \
     SPOTIFY_CLIENT_SECRET, SPOTIFY_REDIRECT_URI, SPOTIFY_WEB_API, T_ALBUM, T_ARTIST, \
     T_PLAYLIST, T_TRACK
 from src.crawler.exceptions import TemporaryError
-from src.crawler.models import Album, Artist, CrawlerTracking, Playlist, Track
+from src.crawler.models import Album, Artist, ArtistAlbum, CrawlerTracking, Playlist, Track
 from src.infratructure.postgres.repository import Repository
 from src.crawler.services.base import BaseService
 from src.crawler.services.parsers.offical import parse_album_detail, parse_albums_response, \
     parse_artist, parse_playlist_detail, parse_playlist_tracks_response, parse_search_albums_response, \
     parse_search_artists_response, parse_search_playlists_response, parse_track_detail, \
     parse_tracks_from_album, parse_user_playlists_response, parse_search_tracks_response
-from src.crawler.services.parsers.web import parse_album_tracks, parse_artist_web, parse_playlist_tracks_web, \
-    parse_track_web_detail
+from src.crawler.services.parsers.web import parse_album_tracks, parse_albums_from_artist_data, \
+    parse_artist_web, parse_playlist_tracks_web, parse_track_web_detail
 
 OFFICIAL_API = 'official_api'
 WEB_API = 'web_api'
@@ -109,8 +109,10 @@ class SpotifyService(BaseService):
             self._delay_request()
         return crawled_albums
 
-    def crawl_albums_by_artist_id(self, artist_id: str, max_pages: int = DEFAULT_MAX_PAGES,
-                                  offset: int = 0, refresh: bool = False) -> Union[None, Iterator[List[Album]]]:
+    def crawl_albums_by_artist_id(
+        self, artist_id: str, max_pages: int = DEFAULT_MAX_PAGES, offset: int = 0, refresh: bool = False,
+        strategy: str = WEB_API
+    ) -> Union[None, Iterator[List[Album]]]:
         """Crawl albums by artist id
 
         Args:
@@ -128,6 +130,7 @@ class SpotifyService(BaseService):
         Yields:
             Iterator[Union[None, Iterator[List[Album]]]]: A list of albums
         """
+
         if not artist_id:
             raise ValueError('artist_id is required')
 
@@ -140,18 +143,35 @@ class SpotifyService(BaseService):
             return
 
         self.logger.info(f'Crawling albums for artist with id: {artist_id}')
-        api = self.client.artist_albums
-        parser = parse_albums_response
+        if strategy == OFFICIAL_API:
+            api = self.client.artist_albums
+            parser = parse_albums_response
+        elif strategy == WEB_API:
+            api = self.web_api.get_artist_albums
+            parser = parse_albums_from_artist_data
+        else:
+            raise ValueError(f'Unknown strategy: {strategy}')
+
         pages = self._get_results_page(
             api=api, parser=parser, artist_id=artist_id, max_pages=max_pages, limit=self.DEFAULT_SEARCH_LIMIT,
-            offset=offset, strategy=OFFICIAL_API
+            offset=offset, strategy=strategy
         )
 
         crawled_albums = 0
         for albums in pages:
-            stored_albums = [
-                self.store_album(album) for album in albums
-                if album.release_date is not None]
+            if strategy == OFFICIAL_API:
+                stored_albums = [
+                    self.store_album(album) for album in albums
+                    if album.release_date is not None]
+            else:
+                stored_albums = []
+                for album in albums:
+                    if not album:
+                        continue
+
+                    album.artist_album = [ArtistAlbum(
+                        album_id=album.album_id, artist_id=artist_id)]
+                    stored_albums.append(self.store_album(album))
             crawled_albums += len(stored_albums)
             yield stored_albums
         self.logger.info(f'Found {crawled_albums} albums')

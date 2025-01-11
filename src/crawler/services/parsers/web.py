@@ -32,6 +32,21 @@ def parse_album(album_data: dict) -> Album:
     )
 
 
+def parse_albums_from_artist_data(response) -> Union[None, List[Album]]:
+    data = response.json()
+    if not data:
+        return
+
+    artist_data = data['data']['artistUnion']
+    if artist_data['__typename'] == 'NotFound':
+        return
+
+    if not artist_data.get('discography'):
+        return
+
+    return parse_discography_all_from_artist(artist_data['discography'])
+
+
 def parse_album_tracks(response) -> Union[None, Album]:
     data = response.json()
     if not data:
@@ -101,6 +116,19 @@ def parse_artist_web(response) -> Artist:
     return artist
 
 
+def parse_discography_all_from_artist(discography_data: dict) -> Union[None, List[Album]]:
+    if not discography_data:
+        return
+
+    # Parse albums
+    album_items = []
+    if discography_data.get('all'):
+        items = discography_data['all']['items']
+        album_items.extend([item['releases']['items'][0] for item in items])
+
+    return [parse_album(item) for item in album_items if item]
+
+
 def parse_discography_from_artist(discography_data: dict, artist_id: str) -> Union[None, List[Album]]:
     if not discography_data:
         return
@@ -118,6 +146,9 @@ def parse_discography_from_artist(discography_data: dict, artist_id: str) -> Uni
         album_items.extend([item['releases']['items'][0] for item in items])
     if discography_data.get('latest'):
         album_items.append(discography_data['latest'])
+    if discography_data.get('all'):
+        items = discography_data['all']['items']
+        album_items.extend([item['releases']['items'][0] for item in items])
 
     albums = []
     for item in album_items:
