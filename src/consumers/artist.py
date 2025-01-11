@@ -16,7 +16,8 @@ class ArtistConsumer(BaseCrawler):
     def artist_deserializer(self):
         return self.get_deserialized(schema_name='artist_value')
 
-    def messages_artist_handler(self, messages):
+    def _process_messages(self, messages):
+        """Extract artist IDs from messages with common validation logic."""
         artist_ids = set()
         for message in messages:
             if message is None:
@@ -27,8 +28,11 @@ class ArtistConsumer(BaseCrawler):
 
             message_value = self.artist_deserializer(
                 message.value(), SerializationContext(message.topic(), MessageField.VALUE))
-            artist_id = message_value['artist_id']
-            artist_ids.add(artist_id)
+            artist_ids.add(message_value['artist_id'])
+        return artist_ids
+
+    def messages_artist_handler(self, messages):
+        artist_ids = self._process_messages(messages)
         if CRAWL_STRATEGY == 'official_api':
             self.spotify_service.crawl_artists(artist_ids)
         elif CRAWL_STRATEGY == 'web_api':
@@ -38,18 +42,7 @@ class ArtistConsumer(BaseCrawler):
             raise ValueError(f'Invalid crawl strategy: {CRAWL_STRATEGY}')
 
     def messages_artist_album_handler(self, messages):
-        artist_ids = set()
-        for message in messages:
-            if message is None:
-                continue
-            if message.error():
-                self.logger.error(message.error())
-                continue
-
-            message_value = self.artist_deserializer(
-                message.value(), SerializationContext(message.topic(), MessageField.VALUE))
-            artist_id = message_value['artist_id']
-            artist_ids.add(artist_id)
+        artist_ids = self._process_messages(messages)
         with ThreadPoolExecutor(max_workers=100) as executor:
             executor.map(self.ingest_artist_albums, artist_ids)
 
