@@ -26,10 +26,21 @@ class CrawlerFlow(BaseCrawler):
         from src.consumers.artist import ArtistConsumer
         from src.infratructure.kafka.consumer import SpotifyConsumer
         return SpotifyConsumer(
-            topics=self.ARTIST_TOPICS,
+            topics=[self.T_ARTIST_OFFICIAL, self.T_ARTIST_WEB],
             group_id='artist-consumer',
-            messages_handler=ArtistConsumer().messages_handler,
+            messages_handler=ArtistConsumer().messages_artist_handler,
             num_messages=50
+        )
+
+    @cached_property
+    def artist_albums_consumer(self):
+        from src.consumers.artist import ArtistConsumer
+        from src.infratructure.kafka.consumer import SpotifyConsumer
+        return SpotifyConsumer(
+            topics=[self.T_ARTIST_ALBUMS],
+            group_id='artist-albums-consumer',
+            messages_handler=ArtistConsumer().messages_artist_album_handler,
+            num_messages=100
         )
 
     @cached_property
@@ -76,6 +87,9 @@ class CrawlerFlow(BaseCrawler):
 
     def ingest_artists(self):
         self.artist_consumer.consume_messages()
+
+    def ingest_artist_albums(self):
+        self.artist_albums_consumer.consume_messages()
 
     def ingest_playlists(self):
         self.playlist_consumer.consume_messages()

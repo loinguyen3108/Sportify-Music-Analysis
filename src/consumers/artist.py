@@ -16,7 +16,7 @@ class ArtistConsumer(BaseCrawler):
     def artist_deserializer(self):
         return self.get_deserialized(schema_name='artist_value')
 
-    def messages_handler(self, messages):
+    def messages_artist_handler(self, messages):
         artist_ids = set()
         for message in messages:
             if message is None:
@@ -24,25 +24,34 @@ class ArtistConsumer(BaseCrawler):
             if message.error():
                 self.logger.error(message.error())
                 continue
-            topic = message.topic()
+
             message_value = self.artist_deserializer(
                 message.value(), SerializationContext(message.topic(), MessageField.VALUE))
             artist_id = message_value['artist_id']
-            try:
-                if topic == self.T_ARTIST_ALBUMS:
-                    self.ingest_artist_albums(artist_id)
-                if topic in (self.T_ARTIST_OFFICIAL, self.T_ARTIST_WEB):
-                    artist_ids.add(artist_id)
-            except SpotifyException as e:
-                self.logger.error(e)
-        if artist_ids:
-            if CRAWL_STRATEGY == 'official_api':
-                self.spotify_service.crawl_artists(artist_ids)
-            elif CRAWL_STRATEGY == 'web_api':
-                with ThreadPoolExecutor(max_workers=10) as executor:
-                    executor.map(self.ingest_artist_web, artist_ids)
-            else:
-                raise ValueError(f'Invalid crawl strategy: {CRAWL_STRATEGY}')
+            artist_ids.add(artist_id)
+        if CRAWL_STRATEGY == 'official_api':
+            self.spotify_service.crawl_artists(artist_ids)
+        elif CRAWL_STRATEGY == 'web_api':
+            with ThreadPoolExecutor(max_workers=100) as executor:
+                executor.map(self.ingest_artist_web, artist_ids)
+        else:
+            raise ValueError(f'Invalid crawl strategy: {CRAWL_STRATEGY}')
+
+    def messages_artist_album_handler(self, messages):
+        artist_ids = set()
+        for message in messages:
+            if message is None:
+                continue
+            if message.error():
+                self.logger.error(message.error())
+                continue
+
+            message_value = self.artist_deserializer(
+                message.value(), SerializationContext(message.topic(), MessageField.VALUE))
+            artist_id = message_value['artist_id']
+            artist_ids.add(artist_id)
+        with ThreadPoolExecutor(max_workers=100) as executor:
+            executor.map(self.ingest_artist_albums, artist_ids)
 
     def ingest_artist_web(self, artist_id: str):
         artist = self.spotify_service.crawl_artist(artist_id)
@@ -90,7 +99,8 @@ class ArtistConsumer(BaseCrawler):
 
         artist_ids = []
         for albums in self.spotify_service.crawl_albums_by_artist_id(
-                artist_id=artist_id, max_pages=self.CRAWLER_MAX_PAGES, offset=offset
+                artist_id=artist_id, max_pages=self.CRAWLER_MAX_PAGES, offset=offset,
+                strategy=CRAWL_STRATEGY
         ):
             for album in albums or []:
                 self.spotify_producer.produce(

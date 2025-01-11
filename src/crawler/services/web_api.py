@@ -18,6 +18,7 @@ class SpotifyWebApi(BaseService):
     }
     ALBUM_HASH_KEY = '8f4cd5650f9d80349dbe68684057476d8bf27a5c51687b2b1686099ab5631589'
     ARTIST_HASH_KEY = '4bc52527bb77a5f8bbb9afe491e9aa725698d29ab73bff58d49169ee29800167'
+    ARTIST_ALBUM_HASH_KEY = '9380995a9d4663cbcb5113fef3c6aabf70ae6d407ba61793fd01e2a1dd6929b0'
     TRACK_HASH_KEY = '5c5ec8c973a0ac2d5b38d7064056c45103c5a062ee12b62ce683ab397b5fbe7d'
     PLAYLIST_HASH_KEY = '19ff1327c29e99c208c86d7a9d8f1929cfdf3d3202a0ff4253c821f1901aa94d'
 
@@ -82,6 +83,23 @@ class SpotifyWebApi(BaseService):
             'operationName': 'queryArtistOverview',
             'variables': f'{{"uri":"spotify:artist:{artist_id}","locale":""}}',
             'extensions': f'{{"persistedQuery":{{"version":1,"sha256Hash":"{self.ARTIST_HASH_KEY}"}}}}',
+        }
+        return self._make_request(
+            method='GET',
+            url=self.QUERY_URL,
+            headers=headers,
+            params=params
+        )
+
+    def get_artist_albums(self, artist_id: str, access_token: str, offset: int = 0, limit: int = 50):
+        headers = self.DEFAULT_HEADERS.copy()
+        headers.update({
+            'authorization': f'Bearer {access_token}'
+        })
+        params = {
+            'operationName': 'queryArtistDiscographyAll',
+            'variables': f'{{"uri":"spotify:artist:{artist_id}","offset":{offset},"limit":{limit}}}',
+            'extensions': f'{{"persistedQuery":{{"version":1,"sha256Hash":"{self.ARTIST_ALBUM_HASH_KEY}"}}}}',
         }
         return self._make_request(
             method='GET',

@@ -24,7 +24,6 @@ class BaseCrawler:
     T_TRACK_OFFICIAL = 'spotify.crawl.track.official'
     T_TRACK_WEB = 'spotify.crawl.track.web'
     ALBUM_TOPICS = [T_ALBUM_TRACKS]
-    ARTIST_TOPICS = [T_ARTIST_OFFICIAL, T_ARTIST_WEB, T_ARTIST_ALBUMS]
     PLAYLIST_TOPICS = [T_PLAYLIST, T_PLAYLIST_TRACKS]
     TRACK_TOPICS = [T_TRACK_WEB, T_TRACK_OFFICIAL]
     TOPICS = (
