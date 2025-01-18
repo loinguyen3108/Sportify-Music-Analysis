@@ -14,3 +14,7 @@ T_ARTIST = 'artist'
 T_PLAYLIST = 'playlist'
 T_TRACK = 'track'
 T_USER = 'user'
+
+MAX_WORKERS = config('MAX_WORKERS', default=100, cast=int)
+CRAWLER_SHOULD_REFRESH = config(
+    'CRAWLER_SHOULD_REFRESH', default=False, cast=bool)

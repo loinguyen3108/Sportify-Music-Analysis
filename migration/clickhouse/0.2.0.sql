@@ -12,6 +12,7 @@ CREATE TABLE spotify.artist_metrics_overtimes
 )
 ENGINE = ReplacingMergeTree
 ORDER BY (artist_key, tracked_at)
+PARTITION BY toYYYYMMDD(tracked_at)
 SETTINGS index_granularity = 8192;
 
 
@@ -60,6 +61,7 @@ CREATE TABLE spotify.playlist_metrics_overtimes
 )
 ENGINE = ReplacingMergeTree
 ORDER BY (playlist_key, tracked_at)
+PARTITION BY toYYYYMMDD(tracked_at)
 SETTINGS index_granularity = 8192;
 
 
@@ -105,6 +107,7 @@ CREATE TABLE spotify.track_metrics_overtimes
 )
 ENGINE = ReplacingMergeTree
 ORDER BY (track_key, tracked_at)
+PARTITION BY toYYYYMMDD(tracked_at)
 SETTINGS index_granularity = 8192;
 
 

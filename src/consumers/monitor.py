@@ -2,6 +2,8 @@ from concurrent.futures import ThreadPoolExecutor
 from functools import cached_property
 
 from confluent_kafka.serialization import SerializationContext, MessageField
+
+from src.configs.crawler import MAX_WORKERS
 from src.crawler.base import BaseCrawler
 
 
@@ -27,6 +29,6 @@ class MonitorConsumer(BaseCrawler):
             object_value = message_value['object_value']
             object_kwargs.append((object_name, object_value))
 
-        with ThreadPoolExecutor(max_workers=100) as executor:
+        with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
             executor.map(
                 self.spotify_service.monitor_crawler, *zip(*object_kwargs))

@@ -4,6 +4,7 @@ from functools import cached_property
 from confluent_kafka.serialization import SerializationContext, MessageField
 from spotipy.exceptions import SpotifyException
 
+from src.configs.crawler import CRAWLER_SHOULD_REFRESH, MAX_WORKERS
 from src.configs.kafka import CRAWL_STRATEGY
 from src.crawler.base import BaseCrawler
 
@@ -36,7 +37,7 @@ class PlaylistConsumer(BaseCrawler):
             except SpotifyException as e:
                 self.logger.error(e)
         if playlist_ids and CRAWL_STRATEGY == 'web_api':
-            with ThreadPoolExecutor(max_workers=10) as executor:
+            with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
                 executor.map(self.ingest_playlist_tracks, playlist_ids)
 
     def ingest_playlist(self, playlist_id: str):
@@ -52,7 +53,9 @@ class PlaylistConsumer(BaseCrawler):
         self.logger.info(f'Ingested playlist: {playlist_id}')
 
     def ingest_playlist_tracks(self, playlist_id: str, offset: int = 0):
-        for tracks in self.spotify_service.crawl_playlist_tracks(playlist_id, offset=offset):
+        for tracks in self.spotify_service.crawl_playlist_tracks(
+                playlist_id, offset=offset, refresh=CRAWLER_SHOULD_REFRESH
+        ):
             for track in tracks:
                 if not track:
                     continue

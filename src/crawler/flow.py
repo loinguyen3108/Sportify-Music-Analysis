@@ -1,4 +1,5 @@
 from functools import cached_property
+from typing import List
 
 from src.configs.crawler import T_ARTIST, T_PLAYLIST, T_TRACK
 from src.crawler.base import BaseCrawler
@@ -16,7 +17,7 @@ class CrawlerFlow(BaseCrawler):
         from src.consumers.album import AlbumConsumer
         from src.infratructure.kafka.consumer import SpotifyConsumer
         return SpotifyConsumer(
-            topics=[self.T_ALBUM, self.T_ALBUM_TRACKS],
+            topics=[self.T_ALBUM_TRACKS],
             group_id='album-consumer',
             messages_handler=AlbumConsumer().messages_handler,
             num_messages=200
@@ -27,10 +28,10 @@ class CrawlerFlow(BaseCrawler):
         from src.consumers.artist import ArtistConsumer
         from src.infratructure.kafka.consumer import SpotifyConsumer
         return SpotifyConsumer(
-            topics=[self.T_ARTIST_OFFICIAL, self.T_ARTIST_WEB],
+            topics=[self.T_ARTIST_WEB],
             group_id='artist-consumer',
             messages_handler=ArtistConsumer().messages_artist_handler,
-            num_messages=50
+            num_messages=100
         )
 
     @cached_property
@@ -52,8 +53,7 @@ class CrawlerFlow(BaseCrawler):
             topics=[self.T_MONITOR_OBJECT],
             group_id='monitor-consumer',
             messages_handler=MonitorConsumer().messages_handler,
-            num_messages=1000
-
+            num_messages=100
         )
 
     @ cached_property
@@ -61,10 +61,10 @@ class CrawlerFlow(BaseCrawler):
         from src.consumers.playlist import PlaylistConsumer
         from src.infratructure.kafka.consumer import SpotifyConsumer
         return SpotifyConsumer(
-            topics=self.PLAYLIST_TOPICS,
+            topics=[self.T_PLAYLIST_TRACKS],
             group_id='playlist-consumer',
             messages_handler=PlaylistConsumer().messages_handler,
-            num_messages=20
+            num_messages=100
         )
 
     @ cached_property
@@ -72,10 +72,10 @@ class CrawlerFlow(BaseCrawler):
         from src.consumers.track import TrackConsumer
         from src.infratructure.kafka.consumer import SpotifyConsumer
         return SpotifyConsumer(
-            topics=self.TRACK_TOPICS,
+            topics=[self.T_TRACK_OFFICIAL, self.T_TRACK_WEB],
             group_id='track-consumer',
             messages_handler=TrackConsumer().messages_handler,
-            num_messages=50
+            num_messages=100
         )
 
     def _prepare_spotify_topics(self):
@@ -199,15 +199,14 @@ class CrawlerFlow(BaseCrawler):
     def monitor_object_consumer(self):
         self.monitor_consumer.consume_messages()
 
-    def produce_monitor_messages(self):
+    def produce_monitor_messages(self, genres: List[str]):
         self.logger.info('Producing monitor messages...')
-        for obj_name in [T_ARTIST, T_PLAYLIST, T_TRACK]:
-            object_ids = self.spotify_service.get_monitor_messages(
-                object_name=obj_name)
-            if not object_ids:
-                continue
+        messages = self.spotify_service.get_monitor_messages(genres=genres)
+        if not messages:
+            return
 
-            for obj_id in object_ids:
+        for obj_name, obj_ids in messages.items():
+            for obj_id in obj_ids:
                 self.spotify_producer.produce(
                     topic=self.T_MONITOR_OBJECT,
                     key={'timestamp': self.time_millis()},

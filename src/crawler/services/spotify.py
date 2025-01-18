@@ -35,7 +35,28 @@ class SpotifyService(BaseService):
     DEFAULT_SEARCH_LIMIT = 50
     DEFAULT_MAX_PAGES = 10_000_000
 
-    QUERY = 'SELECT %s_id FROM %s'
+    QUERY_BY_GENRE = """
+        WITH vietnamese_artist AS (
+            SELECT
+                artist_id
+            FROM
+                artist
+            WHERE ARRAY[:genres] && genres
+        )
+        SELECT
+            pt.playlist_id,
+            a.artist_id,
+            t.album_id,
+            t.track_id
+        FROM
+            vietnamese_artist a
+        JOIN 
+            artist_track art ON a.artist_id = art.artist_id
+        JOIN 
+            track t ON art.track_id = t.track_id
+        LEFT JOIN 
+            playlist_track pt ON t.track_id = pt.track_id;
+    """
 
     def __init__(self):
         super().__init__()
@@ -547,7 +568,7 @@ class SpotifyService(BaseService):
             yield stored_tracks
             crawled_tracks += len(stored_tracks)
         self.logger.info(
-            f'Crawled {len(crawled_tracks)} tracks for album with id: {album_id}')
+            f'Crawled {crawled_tracks} tracks for album with id: {album_id}')
         self.track_func(func_name=func_name, main_arg_name=main_arg_name,
                         main_arg_value=album_id)
 
@@ -620,6 +641,7 @@ class SpotifyService(BaseService):
 
     def get_access_token(self, refresh: bool = False):
         if refresh or not self.access_token:
+            self.logger.info('Getting access token')
             response = self.web_api.get_access_token()
             response.raise_for_status()
             data = response.json()
@@ -627,8 +649,10 @@ class SpotifyService(BaseService):
                 raise Exception('Can not get access token')
 
             self.access_token = data['accessToken']
+            self.logger.info(f'Got new access token: {self.access_token}')
             return self.access_token
 
+        self.logger.info('Using cached access token')
         return self.access_token
 
     def monitor_crawler(self, object_name: str, object_value: str):
@@ -798,22 +822,21 @@ class SpotifyService(BaseService):
             yield stored_tracks
         self.logger.info(f'Found {crawled_tracks} tracks')
 
-    def get_monitor_messages(self, object_name: str):
-        func_name = 'get_monitor_messages'
-        main_arg_name = 'object_name'
-        self.logger.info(f'Get for object_name: {object_name}')
-        if self.find_crawler_tracking_today(
-                func_name=func_name, main_arg_name=main_arg_name, main_arg_value=object_name):
-            self.logger.info(
-                f'Already get for object_name: {object_name} today')
+    def get_monitor_messages(self, genres: List[str]):
+        results = self.repo.session.execute(
+            text(self.QUERY_BY_GENRE), {'genres': genres}).mappings().all()
+        if not results:
+            self.logger.info('No results found')
             return
 
-        query = self.QUERY % (object_name, object_name)
-        object_ids = self.repo.session.execute(text(query)).scalars().all()
-        self.track_func(func_name=func_name, main_arg_name=main_arg_name,
-                        main_arg_value=object_name)
-        self.logger.info(f'Found {len(object_ids)} ids for {object_name}.')
-        return object_ids
+        messages = {
+            T_ALBUM: set([result.album_id for result in results if result.album_id]),
+            T_ARTIST: set([result.artist_id for result in results if result.artist_id]),
+            T_PLAYLIST: set([result.playlist_id for result in results if result.playlist_id]),
+            T_TRACK: set([
+                result.track_id for result in results if result.track_id])
+        }
+        return messages
 
     def _delay_request(self):
         random_delay = random.uniform(self.MIN_DELAY, self.MAX_DELAY)
@@ -825,6 +848,8 @@ class SpotifyService(BaseService):
         kwargs['access_token'] = self.get_access_token()
         while True:
             try:
+                self.logger.info(
+                    f'Requesting to api: {api.__name__} with args: {args} and kwargs: {kwargs}')
                 response = api(*args, **kwargs)
                 result = parser(response)
             except (RequestException, TemporaryError) as e:
@@ -846,6 +871,8 @@ class SpotifyService(BaseService):
             kwargs['access_token'] = self.get_access_token()
         while pages_count < max_pages:
             try:
+                self.logger.info(
+                    f'Requesting to api: {api.__name__} with args: {args} and kwargs: {kwargs}')
                 reponse = api(*args, **kwargs)
                 result = parser(reponse)
             except (RequestException, TemporaryError) as e:

@@ -14,6 +14,10 @@ services:
       - postgres
       - -c
       - wal_level=logical
+      - -c
+      - wal_keep_size=1024
+      - -c
+      - max_slot_wal_keep_size=2048
     volumes:
       - .docker/pg-spotify:/var/lib/postgresql/data
       - ./containers/postgres/scripts:/docker-entrypoint-initdb.d
@@ -23,24 +27,24 @@ services:
       retries: 5
       start_period: 5s
 
-  # pg-airflow:
-  #   image: postgres:16
-  #   container_name: pg-airflow
-  #   hostname: pg-airflow
-  #   restart: always
-  #   environment:
-  #     - POSTGRES_USER=airflow
-  #     - POSTGRES_PASSWORD=airflow
-  #     - POSTGRES_DB=airflow
-  #   ports:
-  #     - "5432:5432"
-  #   volumes:
-  #     - ./data/pg-postgresql:/var/lib/postgresql/data
-  #   healthcheck:
-  #     test: [ "CMD", "pg_isready", "-U", "airflow" ]
-  #     interval: 10s
-  #     retries: 5
-  #     start_period: 5s
+  pg-airflow:
+    image: postgres:16
+    container_name: pg-airflow
+    hostname: pg-airflow
+    restart: always
+    environment:
+      - POSTGRES_USER=airflow
+      - POSTGRES_PASSWORD=airflow
+      - POSTGRES_DB=airflow
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./data/pg-postgresql:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD", "pg_isready", "-U", "airflow" ]
+      interval: 10s
+      retries: 5
+      start_period: 5s
 
   minio:
     image: minio/minio
@@ -82,102 +86,106 @@ services:
       - minio
       - create-buckets
 
-  # airflow:
-  #   image: airflow:local
-  #   container_name: airflow
-  #   hostname: airflow
-  #   restart: always
-  #   depends_on:
-  #     - pg-airflow
-  #   environment:
-  #     - AIRFLOW__CORE__DAGS_FOLDER=/opt/airflow/dags # Path to DAGs, adjust to your needs
-  #     - AIRFLOW__CORE__EXECUTOR=LocalExecutor
-  #     - AIRFLOW__CORE__ENABLE_XCOM_PICKLING=True
-  #     - AIRFLOW__CORE__LOAD_EXAMPLES=False
-  #     - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@pg-airflow:5432/airflow
-  #     - AIRFLOW__API__AUTH_BACKENDS=airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session # Enable Basic Auth
-  #   env_file:
-  #     - containers/airflow/.env
-  #   volumes:
-  #     - ./src:/opt/airflow/nyc_taxi/src
-  #     - ./containers/jars:/home/airflow/jars
-  #   ports:
-  #     - "8080:8080"
-  #   entrypoint: /bin/bash
-  #   command:
-  #     - -c
-  #     - |
-  #       airflow db migrate
-  #       airflow users create --username admin --password admin --role Admin --email admin@admin.com --firstname admin --lastname admin
-  #       airflow standalone
-  #   healthcheck:
-  #     test: [ "CMD", "curl", "--fail", "http://localhost:8080/health" ]
-  #     interval: 30s
-  #     timeout: 10s
-  #     retries: 5
+  airflow:
+    image: airflow:local
+    container_name: airflow
+    hostname: airflow
+    restart: always
+    depends_on:
+      - pg-airflow
+    environment:
+      - AIRFLOW__CORE__DAGS_FOLDER=/opt/airflow/dags # Path to DAGs, adjust to your needs
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__CORE__ENABLE_XCOM_PICKLING=True
+      - AIRFLOW__CORE__LOAD_EXAMPLES=False
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@pg-airflow:5432/airflow
+      - AIRFLOW__API__AUTH_BACKENDS=airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session # Enable Basic Auth
+    env_file:
+      - containers/airflow/.env
+    volumes:
+      - ./src:/opt/airflow/nyc_taxi/src
+      - ./containers/jars:/home/airflow/jars
+    ports:
+      - "8080:8080"
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - |
+        airflow db migrate
+        airflow users create --username admin --password admin --role Admin --email admin@admin.com --firstname admin --lastname admin
+        airflow standalone
+    healthcheck:
+      test: [ "CMD", "curl", "--fail", "http://localhost:8080/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
 
-  # spark-master:
-  #   image: spark:local
-  #   container_name: spark-master
-  #   user: root
-  #   hostname: spark
-  #   environment:
-  #     - SPARK_MODE=master
-  #     - SPARK_RPC_AUTHENTICATION_ENABLED=no
-  #     - SPARK_RPC_ENCRYPTION_ENABLED=no
-  #     - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
-  #     - SPARK_SSL_ENABLED=no
-  #   env_file:
-  #     - containers/spark/.env
-  #   volumes:
-  #     - ./src:/usr/local/src
-  #     - ./containers/spark/spark-defaults.conf:/opt/bitnami/spark/conf/spark-defaults.conf
-  #   ports:
-  #     - "8181:8080"
-  #     - "7077:7077"
-  #     - "4040:4040"
+  spark-master:
+    image: spark:local
+    container_name: spark-master
+    user: root
+    hostname: spark
+    environment:
+      - SPARK_MODE=master
+      - SPARK_RPC_AUTHENTICATION_ENABLED=no
+      - SPARK_RPC_ENCRYPTION_ENABLED=no
+      - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
+      - SPARK_SSL_ENABLED=no
+    env_file:
+      - containers/spark/.env
+    volumes:
+      - ./service_account.json:/opt/bitnami/spark/conf/service_account.json
+      - ./src:/usr/local/spotify/src
+      - ./containers/spark/spark-defaults.conf:/opt/bitnami/spark/conf/spark-defaults.conf
+      - ./containers/jars:/opt/bitnami/spark/addtional_jars
+    ports:
+      - "8181:8080"
+      - "7077:7077"
+      - "4040:4040"
 
-  # spark-worker-1:
-  #   image: spark:local
-  #   container_name: spark-worker-1
-  #   user: root
-  #   environment:
-  #     - SPARK_MODE=worker
-  #     - SPARK_MASTER_URL=spark://spark:7077
-  #     - SPARK_WORKER_MEMORY=2G
-  #     - SPARK_WORKER_CORES=1
-  #     - SPARK_RPC_AUTHENTICATION_ENABLED=no
-  #     - SPARK_RPC_ENCRYPTION_ENABLED=no
-  #     - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
-  #     - SPARK_SSL_ENABLED=no
-  #   env_file:
-  #     - containers/spark/.env
-  #   volumes:
-  #     - ./src:/usr/local/src
-  #     - ./containers/spark/spark-defaults.conf:/opt/bitnami/spark/conf/spark-defaults.conf
-  #   ports:
-  #     - "8182:8081"
+  spark-worker-1:
+    image: spark:local
+    container_name: spark-worker-1
+    user: root
+    environment:
+      - SPARK_MODE=worker
+      - SPARK_MASTER_URL=spark://spark:7077
+      - SPARK_WORKER_MEMORY=2G
+      - SPARK_WORKER_CORES=1
+      - SPARK_RPC_AUTHENTICATION_ENABLED=no
+      - SPARK_RPC_ENCRYPTION_ENABLED=no
+      - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
+      - SPARK_SSL_ENABLED=no
+    env_file:
+      - containers/spark/.env
+    volumes:
+      - ./service_account.json:/opt/bitnami/spark/conf/service_account.json
+      - ./src:/usr/local/spotify/src
+      - ./containers/spark/spark-defaults.conf:/opt/bitnami/spark/conf/spark-defaults.conf
+    ports:
+      - "8182:8081"
 
-  # spark-worker-2:
-  #   image: spark:local
-  #   container_name: spark-worker-2
-  #   user: root
-  #   environment:
-  #     - SPARK_MODE=worker
-  #     - SPARK_MASTER_URL=spark://spark:7077
-  #     - SPARK_WORKER_MEMORY=2G
-  #     - SPARK_WORKER_CORES=1
-  #     - SPARK_RPC_AUTHENTICATION_ENABLED=no
-  #     - SPARK_RPC_ENCRYPTION_ENABLED=no
-  #     - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
-  #     - SPARK_SSL_ENABLED=no
-  #   env_file:
-  #     - containers/spark/.env
-  #   volumes:
-  #     - ./src:/usr/local/src
-  #     - ./containers/spark/spark-defaults.conf:/opt/bitnami/spark/conf/spark-defaults.conf
-  #   ports:
-  #     - "8183:8081"
+  spark-worker-2:
+    image: spark:local
+    container_name: spark-worker-2
+    user: root
+    environment:
+      - SPARK_MODE=worker
+      - SPARK_MASTER_URL=spark://spark:7077
+      - SPARK_WORKER_MEMORY=2G
+      - SPARK_WORKER_CORES=1
+      - SPARK_RPC_AUTHENTICATION_ENABLED=no
+      - SPARK_RPC_ENCRYPTION_ENABLED=no
+      - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
+      - SPARK_SSL_ENABLED=no
+    env_file:
+      - containers/spark/.env
+    volumes:
+      - ./service_account.json:/opt/bitnami/spark/conf/service_account.json
+      - ./src:/usr/local/spotify/src
+      - ./containers/spark/spark-defaults.conf:/opt/bitnami/spark/conf/spark-defaults.conf
+    ports:
+      - "8183:8081"
 
   zookeeper:
     image: confluentinc/cp-zookeeper:7.5.5
