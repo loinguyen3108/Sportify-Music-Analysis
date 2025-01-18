@@ -28,7 +28,7 @@ class SpotifyWebApi(BaseService):
 
     def _make_request(self, method, url, headers=None, params=None):
         response = self.session.request(
-            method=method, url=url, headers=headers, params=params)
+            method=method, url=url, headers=headers, params=params, timeout=60)
         if response.status_code == 401:
             raise RequestException('Access token expired')
         response.raise_for_status()

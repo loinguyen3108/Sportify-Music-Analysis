@@ -12,3 +12,4 @@ SPARK_PG_URI = config(
 SPARK_PG_USER = config('SPARK_PG_USER', default='spotify')
 SPARK_PG_PASSWORD = config('SPARK_PG_PASSWORD', default='spotify')
 JDBC_POSTGRESQL_DRIVER = 'org.postgresql.Driver'
+JDBC_FETCH_SIZE = config('JDBC_FETCH_SIZE', default=10000)

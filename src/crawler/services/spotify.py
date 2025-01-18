@@ -649,7 +649,7 @@ class SpotifyService(BaseService):
                 raise Exception('Can not get access token')
 
             self.access_token = data['accessToken']
-            self.logger.info(f'Got new access token: {self.access_token}')
+            self.logger.info(f'Got new access token')
             return self.access_token
 
         self.logger.info('Using cached access token')

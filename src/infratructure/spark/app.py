@@ -7,7 +7,7 @@ from pyspark.sql.dataframe import DataFrame
 from pyspark.sql import functions as func
 
 from src.configs.spark import DATA_LAKE_BUCKET, GCP_PROJECT_ID, GOOGLE_APPLICATION_CREDENTIALS, \
-    JDBC_POSTGRESQL_DRIVER
+    JDBC_FETCH_SIZE, JDBC_POSTGRESQL_DRIVER
 from src.helpers.gcs import GCSHelper
 
 
@@ -67,7 +67,7 @@ class SparkApp:
             .option('password', db_password) \
             .option('dbtable', query_string) \
             .option('driver', JDBC_POSTGRESQL_DRIVER) \
-            .option('fetchsize', 10000) \
+            .option('fetchsize', JDBC_FETCH_SIZE) \
             .load()
 
         df = df.withColumn('extract_year', func.lit(extract_date.year)) \

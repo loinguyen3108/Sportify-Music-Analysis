@@ -137,7 +137,7 @@ services:
       - ./service_account.json:/opt/bitnami/spark/conf/service_account.json
       - ./src:/usr/local/spotify/src
       - ./containers/spark/spark-defaults.conf:/opt/bitnami/spark/conf/spark-defaults.conf
-      - ./containers/jars:/opt/bitnami/spark/addtional_jars
+      - ./containers/jars:/opt/bitnami/spark/additional_jars
     ports:
       - "8181:8080"
       - "7077:7077"
