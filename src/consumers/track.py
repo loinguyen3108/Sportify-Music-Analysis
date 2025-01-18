@@ -4,6 +4,7 @@ from functools import cached_property
 from confluent_kafka.serialization import SerializationContext, MessageField
 from spotipy.exceptions import SpotifyException
 
+from src.configs.crawler import CRAWLER_SHOULD_REFRESH, MAX_WORKERS
 from src.configs.kafka import CRAWL_STRATEGY
 from src.crawler.base import BaseCrawler
 
@@ -34,13 +35,14 @@ class TrackConsumer(BaseCrawler):
                 except SpotifyException as e:
                     self.logger.error(e)
             elif CRAWL_STRATEGY == 'web_api':
-                with ThreadPoolExecutor(max_workers=10) as executor:
+                with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
                     executor.map(self.ingest_track, track_ids)
             else:
                 raise ValueError(f'Invalid crawl strategy: {CRAWL_STRATEGY}')
 
     def ingest_track(self, track_id: str):
-        track = self.spotify_service.crawl_track(track_id)
+        track = self.spotify_service.crawl_track(
+            track_id, refresh=CRAWLER_SHOULD_REFRESH)
         album_ids = []
         if track:
             self.spotify_producer.produce(
@@ -59,7 +61,7 @@ class TrackConsumer(BaseCrawler):
         if album_ids:
             for album_id in set(album_ids):
                 self.spotify_producer.produce(
-                    topic=self.T_ALBUM,
+                    topic=self.T_ALBUM_TRACKS,
                     key={'timestamp': self.time_millis()},
                     value={'album_id': album_id},
                     key_schema=self.crawler_key_schema,

@@ -24,6 +24,9 @@ deps: requirements.txt
 	echo "Installing dependencies..."
 	pip install -r requirements.txt
 
+download-spark-jars:
+	./download_spark_jars.sh
+
 install:
 	pip install -e .
 

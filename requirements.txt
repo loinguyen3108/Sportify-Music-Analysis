@@ -1,12 +1,13 @@
 apache-airflow==2.9.2
 apache-airflow-providers-apache-spark==4.10.0
+beautifulsoup4==4.12.3
 confluent-kafka==2.5.0
 confluent-kafka[avro]==2.5.0
 fastavro==1.9.5
+google-cloud-storage==2.19.0
 pyspark==3.5.3
 python-decouple==3.8
 requests==2.32.3
 SQLAlchemy==1.4.51
 spotipy==2.24.0
 psycopg2-binary==2.9.10
-beautifulsoup4==4.12.3

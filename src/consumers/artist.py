@@ -2,8 +2,8 @@ from concurrent.futures import ThreadPoolExecutor
 from functools import cached_property
 
 from confluent_kafka.serialization import SerializationContext, MessageField
-from spotipy.exceptions import SpotifyException
 
+from src.configs.crawler import CRAWLER_SHOULD_REFRESH, MAX_WORKERS
 from src.configs.kafka import CRAWL_STRATEGY
 from src.crawler.base import BaseCrawler
 
@@ -36,18 +36,19 @@ class ArtistConsumer(BaseCrawler):
         if CRAWL_STRATEGY == 'official_api':
             self.spotify_service.crawl_artists(artist_ids)
         elif CRAWL_STRATEGY == 'web_api':
-            with ThreadPoolExecutor(max_workers=100) as executor:
+            with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
                 executor.map(self.ingest_artist_web, artist_ids)
         else:
             raise ValueError(f'Invalid crawl strategy: {CRAWL_STRATEGY}')
 
     def messages_artist_album_handler(self, messages):
         artist_ids = self._process_messages(messages)
-        with ThreadPoolExecutor(max_workers=100) as executor:
+        with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
             executor.map(self.ingest_artist_albums, artist_ids)
 
     def ingest_artist_web(self, artist_id: str):
-        artist = self.spotify_service.crawl_artist(artist_id)
+        artist = self.spotify_service.crawl_artist(
+            artist_id, refresh=CRAWLER_SHOULD_REFRESH)
         if artist:
             self.spotify_producer.produce(
                 topic=self.T_ARTIST_OFFICIAL,
@@ -93,7 +94,7 @@ class ArtistConsumer(BaseCrawler):
         artist_ids = []
         for albums in self.spotify_service.crawl_albums_by_artist_id(
                 artist_id=artist_id, max_pages=self.CRAWLER_MAX_PAGES, offset=offset,
-                strategy=CRAWL_STRATEGY
+                strategy=CRAWL_STRATEGY, refresh=CRAWLER_SHOULD_REFRESH
         ):
             for album in albums or []:
                 self.spotify_producer.produce(
