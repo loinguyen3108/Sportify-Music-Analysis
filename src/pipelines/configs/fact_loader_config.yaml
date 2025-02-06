@@ -1,0 +1,31 @@
+name: Spotify Fact Loader Configuration
+tables:
+  - name: fact_album_track
+    partition_col: release_date_key
+    join_keys: 
+      - release_date_key
+      - album_key
+      - artist_key
+      - genre_key
+      - track_key
+    insert_cols:
+      - release_date_key
+      - album_key
+      - artist_key
+      - genre_key
+      - track_key
+  - name: fact_playlist_track
+    partition_col: added_date_key
+    join_keys: 
+      - added_date_key
+      - playlist_key
+      - user_key
+      - genre_key
+      - track_key
+    insert_cols:
+      - added_date_key
+      - playlist_key
+      - user_key
+      - genre_key
+      - track_key
+      - date_actual

@@ -1,0 +1,80 @@
+name: Spotify Dimension Loader Configuration
+tables:
+  - name: dim_album
+    scd_type: 1
+    join_key: album_key
+    main_cols:
+      - album_key
+      - name
+      - url
+      - cover_image
+      - album_type
+      - release_date_key
+      - release_date_precision
+      - label
+    hashed_cols:
+      - name
+      - url
+      - cover_image
+      - album_type
+      - release_date_key
+      - release_date_precision
+      - label
+  - name: dim_genre
+    scd_type: 1
+    join_key: genre_key
+    main_cols:
+      - genre_key
+      - name
+    hashed_cols:
+      - name
+  - name: dim_playlist
+    scd_type: 2
+    join_key: playlist_key
+    main_cols:
+      - playlist_key
+      - name
+      - url
+      - collaborative
+      - is_public
+      - snapshot_id
+      - followers_count
+      - user_key
+    hashed_cols:
+      - name
+      - url
+      - collaborative
+      - is_public
+      - snapshot_id
+      - followers_count
+      - user_key
+  - name: dim_track
+    scd_type: 2
+    join_key: track_key
+    main_cols:
+      - track_key
+      - name
+      - url
+      - album_key
+      - disc_number
+      - duration_ms
+      - is_explicit
+      - plays_count
+    hashed_cols:
+      - name
+      - url
+      - album_key
+      - disc_number
+      - duration_ms
+      - is_explicit
+      - plays_count
+  - name: dim_user
+    scd_type: 1
+    join_key: user_key
+    main_cols:
+      - user_key
+      - name
+      - url
+    hashed_cols:
+      - name
+      - url

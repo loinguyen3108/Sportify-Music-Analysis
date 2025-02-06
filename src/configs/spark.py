@@ -1,5 +1,11 @@
 from decouple import config
 
+
+# BigQuery
+BQ_PROJECT_ID = config('BQ_PROJECT_ID')
+BQ_DATASET_ID = config('BQ_DATASET_ID')
+BQ_DATASET_STAGING_ID = config('BQ_DATASET_STAGING_ID')
+
 # Data Lake
 DATA_LAKE_BUCKET = config('DATA_LAKE_BUCKET')
 GCP_PROJECT_ID = config('GCP_PROJECT_ID')

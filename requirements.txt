@@ -1,4 +1,5 @@
 apache-airflow==2.9.2
+apache-airflow[google]==2.9.2
 apache-airflow-providers-apache-spark==4.10.0
 beautifulsoup4==4.12.3
 confluent-kafka==2.5.0
