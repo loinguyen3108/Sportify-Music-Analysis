@@ -32,7 +32,7 @@ class SpotifyLoader:
 
     F_MERGE_QUERY = """
         SET (min_date, max_date) = (
-            SELECT AS STRUCT MIN(release_date_key), MAX(release_date_key)
+            SELECT AS STRUCT MIN({partition_col}), MAX({partition_col})
             FROM `{dataset_staging_name}.{table_name}`
         );
 

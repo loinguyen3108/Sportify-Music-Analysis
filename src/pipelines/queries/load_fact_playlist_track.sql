@@ -8,7 +8,7 @@
             IF table_exists THEN
                 
         SET (min_date, max_date) = (
-            SELECT AS STRUCT MIN(release_date_key), MAX(release_date_key)
+            SELECT AS STRUCT MIN(added_date_key), MAX(added_date_key)
             FROM `spotify_dwh_staging.fact_playlist_track`
         );
 

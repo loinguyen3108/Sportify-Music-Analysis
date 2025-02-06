@@ -138,7 +138,7 @@ class SparkApp:
             df (DataFrame): Table is extracted from MSSQL
             dataset_id (str): Dataset ID
             table_name (str): Table Name need load into data lake
-            mode (str, optional): Append or overwrite. Defaults to 'append'.
+            mode (str, optional): Append or overwrite. Defaults to 'overwrite'.
         """
         df.write.format('bigquery') \
             .option('table', f'{dataset_id}.{table_name}') \

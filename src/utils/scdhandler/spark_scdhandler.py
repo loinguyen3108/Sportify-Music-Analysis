@@ -23,9 +23,9 @@ class SCDHandler:
         # Extract columns from target DataFrame excluding columns
         target_cols = [x for x in target_df.columns
                        if x not in exclused_cols_to_hash]
-        cols_missing = set([col for col in target_cols
-                            if col not in source_df.columns])
-        if cols_missing:
+        if cols_missing := {
+            col for col in target_cols if col not in source_df.columns
+        }:
             raise Exception(
                 f'Cols missing in source DataFrame: {cols_missing}')
 
