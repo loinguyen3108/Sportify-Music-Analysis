@@ -14,4 +14,4 @@ class GCSHelper:
             bucket_or_name=self.bucket.name, prefix=blob_name,
             max_results=10
         )
-        return len(list(blobs)) > 1
+        return len(list(blobs)) > 0

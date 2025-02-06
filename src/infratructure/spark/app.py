@@ -3,11 +3,12 @@ from functools import cached_property
 from typing import List
 
 from pyspark.sql import SparkSession
-from pyspark.sql.dataframe import DataFrame
 from pyspark.sql import functions as func
+from pyspark.sql.dataframe import DataFrame
+from pyspark.sql.types import StructType
 
-from src.configs.spark import DATA_LAKE_BUCKET, GCP_PROJECT_ID, GOOGLE_APPLICATION_CREDENTIALS, \
-    JDBC_FETCH_SIZE, JDBC_POSTGRESQL_DRIVER
+from src.configs.spark import BQ_PROJECT_ID, BQ_DATASET_ID, DATA_LAKE_BUCKET, \
+    GCP_PROJECT_ID, GOOGLE_APPLICATION_CREDENTIALS, JDBC_FETCH_SIZE, JDBC_POSTGRESQL_DRIVER
 from src.helpers.gcs import GCSHelper
 
 
@@ -42,11 +43,33 @@ class SparkApp:
         conf.set('fs.gs.impl',
                  'com.google.cloud.hadoop.fs.gcs.GoogleHadoopFileSystem')
 
+    def extract_from_bigquery(self, table_name: str) -> DataFrame:
+        return self.spark.read \
+            .format('bigquery') \
+            .option('table', f'{BQ_PROJECT_ID}:{BQ_DATASET_ID}.{table_name}') \
+            .load()
+
+    def extract_from_gcs(self, bucket_name: str, table_name: str, schema: StructType) -> DataFrame:
+        """Extract data from GCS
+
+        Args:
+            table_name (str): The name of table
+            schema (StructType): The schema of table
+
+        Returns:
+            DataFrame: Spark DataFrame
+        """
+        return self.spark.read \
+            .option('header', True) \
+            .schema(schema) \
+            .parquet(f'gs://{bucket_name}/{table_name}')
+
     def extract_from_postgres(
         self, url: str, db_username: str, db_password, schema_name: str, table_name: str,
-        incremental_col: str = 'updated_at', extract_date: date = date.today()
+        incremental_col: str = 'updated_at', extract_date: date = date.today(),
+        df_schema: StructType = None
     ) -> DataFrame:
-        """Extract data from Postgres with JDBC
+        """Extract data from Postgres with JDBC by incremental loading or query
 
         Args:
             url (str): The url of database
@@ -55,7 +78,15 @@ class SparkApp:
             schema_name (str): The name of schema
             table_name (str): The name of table
             incremental_col (str, optional): The name of time column. Defaults to `updated_at`.
+            extract_date (date, optional): The date to extract. Defaults to today().
+            df_schema (StructType, optional): The schema of table
+
+        Returns:
+            DataFrame
         """
+        if not df_schema:
+            raise ValueError('df_schema is required')
+
         query_string = self.get_incremental_query(
             schema_name=schema_name, table_name=table_name,
             incremental_col=incremental_col
@@ -68,6 +99,7 @@ class SparkApp:
             .option('dbtable', query_string) \
             .option('driver', JDBC_POSTGRESQL_DRIVER) \
             .option('fetchsize', JDBC_FETCH_SIZE) \
+            .schema(df_schema) \
             .load()
 
         df = df.withColumn('extract_year', func.lit(extract_date.year)) \
@@ -98,7 +130,25 @@ class SparkApp:
         ).collect()[0]['max_date']
         return f'(select * from {schema_name}.{table_name} where {incremental_col}::date > \'{max_date}\'::date) as tmp'
 
-    def load_to_gcs(self, df: DataFrame, table_name: str, partition_by: List[str] = None, mode: str = 'overwrite'):
+    def load_to_bigquery(self, df: DataFrame, dataset_id: str, table_name: str, mode: str = 'overwrite',
+                         inter_format: str = 'parquet'):
+        """Load data to BigQuery
+
+        Args:
+            df (DataFrame): Table is extracted from MSSQL
+            dataset_id (str): Dataset ID
+            table_name (str): Table Name need load into data lake
+            mode (str, optional): Append or overwrite. Defaults to 'append'.
+        """
+        df.write.format('bigquery') \
+            .option('table', f'{dataset_id}.{table_name}') \
+            .option('intermediateFormat', inter_format) \
+            .mode(mode) \
+            .save()
+        self.logger.info(
+            f'Ingest data success in BigQuery: {BQ_DATASET_ID}.{table_name}')
+
+    def load_to_gcs(self, df: DataFrame, table_name: str, partition_by: List[str] = None, mode: str = 'append'):
         """Load data to GCS
 
         Args:

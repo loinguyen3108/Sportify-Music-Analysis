@@ -94,7 +94,7 @@ services:
     depends_on:
       - pg-airflow
     environment:
-      - AIRFLOW__CORE__DAGS_FOLDER=/opt/airflow/dags # Path to DAGs, adjust to your needs
+      - AIRFLOW__CORE__DAGS_FOLDER=/opt/airflow/spotify/src/dags # Path to DAGs, adjust to your needs
       - AIRFLOW__CORE__EXECUTOR=LocalExecutor
       - AIRFLOW__CORE__ENABLE_XCOM_PICKLING=True
       - AIRFLOW__CORE__LOAD_EXAMPLES=False
@@ -103,10 +103,11 @@ services:
     env_file:
       - containers/airflow/.env
     volumes:
-      - ./src:/opt/airflow/nyc_taxi/src
+      - ./src:/opt/airflow/spotify/src
       - ./containers/jars:/home/airflow/jars
+      - ./google_service_account.json:/opt/bitnami/spark/conf/google_service_account.json
     ports:
-      - "8080:8080"
+      - "8090:8080"
     entrypoint: /bin/bash
     command:
       - -c
@@ -134,7 +135,7 @@ services:
     env_file:
       - containers/spark/.env
     volumes:
-      - ./service_account.json:/opt/bitnami/spark/conf/service_account.json
+      - ./google_service_account.json:/opt/bitnami/spark/conf/google_service_account.json
       - ./src:/usr/local/spotify/src
       - ./containers/spark/spark-defaults.conf:/opt/bitnami/spark/conf/spark-defaults.conf
       - ./containers/jars:/opt/bitnami/spark/additional_jars
@@ -159,7 +160,7 @@ services:
     env_file:
       - containers/spark/.env
     volumes:
-      - ./service_account.json:/opt/bitnami/spark/conf/service_account.json
+      - ./google_service_account.json:/opt/bitnami/spark/conf/google_service_account.json
       - ./src:/usr/local/spotify/src
       - ./containers/spark/spark-defaults.conf:/opt/bitnami/spark/conf/spark-defaults.conf
     ports:
@@ -181,7 +182,7 @@ services:
     env_file:
       - containers/spark/.env
     volumes:
-      - ./service_account.json:/opt/bitnami/spark/conf/service_account.json
+      - ./google_service_account.json:/opt/bitnami/spark/conf/google_service_account.json
       - ./src:/usr/local/spotify/src
       - ./containers/spark/spark-defaults.conf:/opt/bitnami/spark/conf/spark-defaults.conf
     ports:
