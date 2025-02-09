@@ -101,10 +101,7 @@ CREATE OR REPLACE TABLE `spotify_dwh.fact_playlist_track` (
     FOREIGN KEY (track_key) REFERENCES `spotify_dwh.dim_track` (track_key) NOT ENFORCED
 )
 PARTITION BY
-    DATE_TRUNC(date_actual, MONTH)
-OPTIONS (
-    require_partition_filter = TRUE
-);
+    DATE_TRUNC(date_actual, MONTH);
 
 CREATE OR REPLACE TABLE `spotify_dwh.fact_album_track` (
     release_date_key        INT64       NOT NULL,
@@ -120,10 +117,7 @@ CREATE OR REPLACE TABLE `spotify_dwh.fact_album_track` (
     FOREIGN KEY (track_key) REFERENCES `spotify_dwh.dim_track` (track_key) NOT ENFORCED
 )
 PARTITION BY
-    RANGE_BUCKET(release_date_key, GENERATE_ARRAY(0, 20991231, 50000))
-OPTIONS (
-    require_partition_filter = TRUE
-);
+    RANGE_BUCKET(release_date_key, GENERATE_ARRAY(0, 20991231, 50000));
 
 -- Insert explicit dates
 INSERT INTO `spotify_dwh.dim_date`

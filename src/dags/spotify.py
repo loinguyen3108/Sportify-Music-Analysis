@@ -139,8 +139,19 @@ with DAG(
             }
         )
 
+        load_album_track_metric = BigQueryInsertJobOperator(
+            task_id='load_album_track_metric',
+            configuration={
+                'query': {
+                    'query': "{% include  'load_album_track_metric.sql' %}",
+                    'useLegacySql': False
+                }
+            }
+        )
+
         load_fact_album_track
         load_fact_playlist_track
+        load_album_track_metric
 
     ingest_raw_data >> transform_dimensions >> load_dimensions() \
         >> transform_facts >> load_facts()
