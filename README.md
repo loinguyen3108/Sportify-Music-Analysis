@@ -1,5 +1,7 @@
 # Spotify Analysis End to End Project
 
+![spotify_analysis](images/spotify_analysis.png)
+
 ## **Table of Contents**
 - [Project Overview](#project-overview)
   - [Key Objectives](#key-objectives)
@@ -21,8 +23,6 @@
   - [Prerequisites](#prerequisites)
   - [Installation](#installation)
   - [Running the Project](#running-the-project)
-
-![spotify_analysis](images/spotify_analysis.png)
 
 ## Project Overview
 
