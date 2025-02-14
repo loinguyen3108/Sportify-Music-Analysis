@@ -152,7 +152,7 @@ Ensure you have the following installed on your system:
    ```
 
 2. **Set Up Environment Variables:**:
-   - Create a .env file in the root directory and configure the following variables:
+   - Create a `.env` file in the root directory and configure the following variables:
     ```bash
     SPOTIFY_CLIENT_ID=<your_spotify_client_id>
     SPOTIFY_CLIENT_SECRET=<your_spotify_client_secret>
